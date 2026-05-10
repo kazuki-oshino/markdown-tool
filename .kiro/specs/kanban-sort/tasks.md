@@ -84,7 +84,7 @@
 
 ## 4. internal/fileio: ファイル I/O 副作用層
 
-- [ ] 4.1 (P) Read + LineEnding 検出 + Meta 抽出
+- [x] 4.1 (P) Read + LineEnding 検出 + Meta 抽出
   - `internal/fileio/meta.go` に `Meta` 構造体と `LineEnding` enum（`LineEndingLF` / `LineEndingCRLF` / `LineEndingMixed`）を定義
   - `internal/fileio/read.go` に `Read(path string) (content string, meta Meta, err error)` を実装
   - 改行コードを検出し、`content` は LF 統一に正規化、`Meta` に LineEnding と HasTrailingEOL を格納（混在は最頻採用）
@@ -160,3 +160,4 @@
 - task 1.4: スタブ状態 (cmd/mdt/main.go が空) のままでは `go mod tidy` が cobra / bubbletea / teatest を未使用と判定して go.mod から削除する。`tools/depspin/deps.go` に `//go:build deps_pin` タグ付きの blank import アンカーを置くことで、デフォルトビルドからは除外しつつ tidy の解析対象として保持し、3 パッケージを direct require に固定できる。task 5.1 (bubbletea/teatest) と task 6.1 (cobra) の実 import が入った時点で `tools/depspin/` ディレクトリは削除して構わない。
 - task 1.4: `github.com/charmbracelet/x/exp/teatest` は安定タグを持たない実験的パッケージで `@latest` 解決値が `v0.0.0-<timestamp>-<commit>` 形式の Go pseudo-version になる（例: `v0.0.0-20260510005209-39224119bc89`）。これは Go semver の正規形式であり、`go.mod` への固定として有効。リリース版を期待する記述（design 等）は禁止し、解決値そのままを `go.mod` に保存する運用とする。
 - task 2.5: kanban 層のテスト用フィクスチャは `internal/kanban/testdata/` に配置する（design.md File Structure Plan の repo-root `testdata/kanban/` から移動）。理由は depguard `kanban-pure` ルールが `os` / `io` / `io/fs` を `internal/kanban/**/*.go` 全件（テスト含む）から禁止しており、repo-root の固定パスを `os.ReadFile` で読めない。代替として `//go:embed testdata/*.md.{in,out}` を採用するが、embed は親ディレクトリ参照不可のためフィクスチャを `internal/kanban/testdata/` に置く必要がある。Go 標準慣行（package 直下 testdata/）にも整合し、repo-root `testdata/fileio/` は fileio 層の改行コードフィクスチャ用にそのまま維持される。
+- task 4.1: `LineEndingMixed` enum 値は design.md table の 3 値定義に従い `meta.go` で必ず定義するが、`Read` は task 4.1 の「混在は最頻採用」ルールに従い CRLF/LF のいずれか優勢な方に集約して返す（同数時は LF にタイブレーク）ため、原則 `Read` からは emit されない。AtomicWrite (task 4.2) は `Meta.LineEnding == LineEndingMixed` を「Read 経由では発生しない予約値」として扱い、LF にフォールバックするか panic させるか方針を決めること（呼出側が `LineEndingMixed` を明示的に渡す経路は本 spec 範囲では存在しない）。
