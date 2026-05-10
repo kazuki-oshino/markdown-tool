@@ -144,7 +144,7 @@
   - _Requirements: 1.4, 4.3, 4.4, 4.6_
   - _Depends: 6.2_
 
-- [ ] 7.2 静的解析と全テストの最終確認
+- [x] 7.2 静的解析と全テストの最終確認
   - `just lint` を実行し、depguard / ast-grep / `go vet` がすべて pass
   - `internal/kanban` 配下に意図せぬ I/O import（`os` / `io` / `time` / `rand` / `fmt.Print*` 等）が混入していないことを確認
   - `just test` で全テスト（`./...`）が pass
