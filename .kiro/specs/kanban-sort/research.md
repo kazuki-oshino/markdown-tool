@@ -180,3 +180,41 @@
 3. **「Research Needed」7 項目を design.md の前半で意思決定する**。特に diff フォーマット・アトミック書き込み・改行コード保持の 3 点は実装着手前に確定が必須。
 4. **design 着手前に `/kiro-steering` を実行**して `tech.md`（Go 1.25 / Cobra / Bubble Tea / `just` / TDD）と `structure.md`（Option C のレイアウト）を固定すると、後続タスクの整合確認コストが下がる。
 5. **静的検査ルール（linter / ast-grep）を design.md に明記**し、CLAUDE.md の「静的検査可能なルールはプロンプトでなく linter / ast-grep」を満たす形で運用する。
+
+## 9. Design Decisions (design.md 確定事項)
+
+> design.md の最終化に際し、§6「Research Needed」を以下のとおり確定した。詳細仕様は `design.md` を正とする。
+
+| # | 論点 | 確定事項 | 採用理由 / トレードオフ |
+| --- | --- | --- | --- |
+| 1 | `--dry-run` 差分フォーマット | 自前実装の行単位プレフィックス (`+` / `-` / ` `)。`internal/diffview.Render(before, after string) string` として純関数化 | 依存追加なし／決定的／ゴールデンテストが書きやすい。性能要件（数千行）に対し LCS で十分 |
+| 2 | アトミック書き込み戦略 | 同一ディレクトリに一時ファイル → `os.Rename` で置換。失敗時は一時ファイル除去で元ファイル不変 | R4-5（中間破損禁止）を満たす標準パターン。Windows 互換は将来課題として明記 |
+| 3 | 改行コード保持ロジック | `internal/fileio.Read` で `Meta{LineEnding, HasTrailingEOL}` を抽出、純ロジックは LF 統一の文字列を扱い、`AtomicWrite` で再付与 | 純ロジックが改行コードを意識せずに済むため決定性とテスト容易性が両立。混在ファイルは「最頻」を採用し情報損失を回避 |
+| 4 | Bubble Tea スケルトン仕様 | 固定文言の初期画面、`q` / `Ctrl+C` で `tea.Quit`、戻り値 nil → CLI 側で exit 0 | 6.1–6.4 を最小実装で満たす。リッチ UX は明示的に out of boundary |
+| 5 | インデント判定の細部 | タブ 1 個 = 半角スペース 2 個を「1 段」として正規化（タブ → 半角 2 個に展開して幅比較）。混在も同一規則で深さを算出 | R3-1 の表現を機械的に解釈可能な単一規則に落とす。混在時の振動回避はゴールデンテストで網羅 |
+| 6 | エラー区分と終了コード | `OK = 0` / `RuntimeError = 1`（I/O 失敗など）/ `UsageError = 2`（Cobra のバリデーション失敗）。Cobra 標準の挙動を踏襲 | R5-3 の「正常 0 / 使用方法不正 非ゼロ / 実行時エラー 非ゼロ」を満たしつつ、エコシステム慣用に揃える |
+| 7 | linter / ast-grep ルール | `tools/golangci/.golangci.yml` の `depguard` で `internal/kanban` から `os` / `io` / `io/fs` / `os/exec` / `net/http` / `time` / `math/rand` / `crypto/rand` を import 禁止。`tools/ast-grep/no-io-in-kanban.yml` で `fmt.Print*` / `fmt.Fprint*` を検出 | CLAUDE.md「静的検査可能なルールはプロンプトでなく linter / ast-grep に寄せる」に整合。R7-3 / R7-4 の機械的担保 |
+| 8 | Justfile 最小レシピ | `just test` / `just lint` / `just build` / `just run` / `just fmt` を初期セットとして整備 | プロジェクトルール（`just` 採用）を満たし、開発ループを統一 |
+| 9 | テスト戦略 | 純関数: テーブル駆動 + ゴールデン (`testdata/kanban/*.md.in` / `.md.out`) + 冪等性。I/O: `t.TempDir()`。TUI: `teatest`。CLI: `cobra.Command.SetArgs` | TDD（探索→Red→Green→Refactor）に整合し、各層を独立に検証可能 |
+| 10 | ステアリング不在の解消 | design 確定後に `/kiro-steering` を実行し `tech.md` / `structure.md` を整備することを推奨。本 spec の design はそれ無しでも自己完結する | design 着手をブロックしない。タスクフェーズで steering を併走させるか後続フェーズで対応するかは利用者判断 |
+
+## 10. Synthesis Outcomes
+
+### 10.1 Generalization
+
+- **Sort 関数の純粋関数化が要件横断の中核**: R1（移動）, R2（境界判定）, R3（親子判定）, R7（純粋性）はすべて「Markdown 文字列 → Markdown 文字列」の単一決定的関数に集約される。`Sort(input string) (string, error)` を中心の抽象に据え、他の機能（diff 生成、ファイル I/O、TUI、CLI）はこの関数の入出力を加工・転送する周辺責務として配置することで、要件群を 1 つの公開 API に縮約した
+- **将来の `mdt format` 等への一般化余地**: 純ロジック層 `internal/kanban` のインターフェース（文字列 → 文字列）は他のマークダウン操作にも再利用可能。本 spec ではパッケージ名を `kanban` とすることでドメイン固有性を明示し、将来の `mdt format` 用には別パッケージ（例: `internal/markdown`）を切り出す余地を残した（実装は本 spec ではしない）
+
+### 10.2 Build vs Adopt
+
+- **Adopt**: Cobra（CLI 構成・終了コード・`--help`）, Bubble Tea（TUI Model/Update/View）, Go 標準ライブラリ（ファイル I/O, 文字列処理）。いずれも brief で確定済みで、本機能に必要な機能を直接提供する
+- **Build (自前)**:
+  - **行ベース Markdown パーサ**: `goldmark` 等の AST は brief で明示的に「過剰」と判断済み。要件は行単位のチェックボックス操作のみで、AST が提供する豊富な構文サポートは不要
+  - **行単位差分フォーマッタ**: `github.com/sergi/go-diff` 等の外部 diff ライブラリは依存追加コストに見合わない。要件 4.2「移動された行・移動先・変更されなかった範囲が一目で識別可能」は最小プレフィックス形式で十分満たせる
+  - **アトミック書き込み**: temp file + `os.Rename` は標準ライブラリで完結。専用ライブラリを導入する利得がない
+
+### 10.3 Simplification
+
+- **パッケージ細分化を避ける**: research.md §4 で示した Option B（5 層分離）は本 spec の規模には過剰と判断。Option C（純ロジック 1 パッケージ + I/O / CLI / TUI 分離）に集約することで雛形ファイル数を抑え、TDD の初動を速める。将来の再分割は公開 API（`kanban.Sort` 1 本）を保ったまま低コストで実施可能
+- **設定ファイル / ロガー / 観測機構を持たない**: 個人用 CLI のため、`.mdtrc` 読み込み・構造化ログ・メトリクス収集は導入しない。stderr 出力で十分
+- **`internal/kanban` のエラー型を公開しない**: MVP では `error` は `nil` 想定で、UTF-8 不正等の致命的ケースのみ標準 `error` を返す。専用エラー型（`SortError`, `ParseError`）を切るのは早すぎる抽象化と判断

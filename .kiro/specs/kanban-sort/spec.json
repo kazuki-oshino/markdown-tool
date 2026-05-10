@@ -2,7 +2,7 @@
   "approvals": {
     "design": {
       "approved": false,
-      "generated": false
+      "generated": true
     },
     "requirements": {
       "approved": true,
@@ -16,7 +16,7 @@
   "created_at": "2026-05-10T00:36:04Z",
   "feature_name": "kanban-sort",
   "language": "ja",
-  "phase": "requirements-generated",
+  "phase": "design-generated",
   "ready_for_implementation": false,
-  "updated_at": "2026-05-10T00:46:53Z"
+  "updated_at": "2026-05-10T00:50:00Z"
 }
