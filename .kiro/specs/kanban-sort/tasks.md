@@ -25,7 +25,7 @@
   - `testdata/kanban` と `testdata/fileio` 双方で `*.md.in` と `*.md.out` の件数が一致することを確認
   - _Requirements: 7.2_
 
-- [ ] 1.4 外部依存パッケージの追加
+- [x] 1.4 外部依存パッケージの追加
   - `go get github.com/spf13/cobra@latest` で Cobra を追加し、解決された実バージョンを `go.mod` に固定する（v1.10 リリース未定のため `@latest` の実測値を採用）
   - `go get github.com/charmbracelet/bubbletea@latest` で Bubble Tea を追加し、解決された v1 系のバージョンを `go.mod` に固定
   - `go get github.com/charmbracelet/x/exp/teatest@latest` でテスト用ライブラリを追加
@@ -157,3 +157,5 @@
 - task 1.2: depguard (golangci-lint v2) の `files:` glob は `**/` の挙動が `glob.Glob` 仕様で「中間 segment が 1 つ以上必要」となるため、`**/internal/kanban/**/*.go` 単独では `internal/kanban/` 直下ファイルが拾えない。`**/internal/kanban/*.go` と `**/internal/kanban/**/*.go` の 2 系統を併記する必要がある (`tools/golangci/.golangci.yml` 内コメント参照)。
 - task 1.2: ast-grep の Go パーサで `fmt.Println($$$)` という pattern は `type_conversion_expression` として解釈されてしまい呼び出し式にマッチしない。`kind: call_expression` + `regex: "^fmt\\.(Print|Println|Printf|Fprint|Fprintln|Fprintf)\\("` の組合せで構文ノードを呼び出し式に固定し regex で関数名を絞る方式が必須。
 - task 1.2: `internal/kanban/` 配下に `_*.go` で始まるダミーファイルを置くと Go の build が無視するため lint 検証も発火しない。検証用ダミーは `zz_*.go` 等の通常ファイル名で配置し、検証後に必ず削除する。
+- task 1.4: スタブ状態 (cmd/mdt/main.go が空) のままでは `go mod tidy` が cobra / bubbletea / teatest を未使用と判定して go.mod から削除する。`tools/depspin/deps.go` に `//go:build deps_pin` タグ付きの blank import アンカーを置くことで、デフォルトビルドからは除外しつつ tidy の解析対象として保持し、3 パッケージを direct require に固定できる。task 5.1 (bubbletea/teatest) と task 6.1 (cobra) の実 import が入った時点で `tools/depspin/` ディレクトリは削除して構わない。
+- task 1.4: `github.com/charmbracelet/x/exp/teatest` は安定タグを持たない実験的パッケージで `@latest` 解決値が `v0.0.0-<timestamp>-<commit>` 形式の Go pseudo-version になる（例: `v0.0.0-20260510005209-39224119bc89`）。これは Go semver の正規形式であり、`go.mod` への固定として有効。リリース版を期待する記述（design 等）は禁止し、解決値そのままを `go.mod` に保存する運用とする。
