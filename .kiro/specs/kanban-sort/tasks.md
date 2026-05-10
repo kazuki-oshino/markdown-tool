@@ -72,7 +72,7 @@
 
 ## 3. internal/diffview: 差分レンダラ
 
-- [ ] 3.1 (P) LCS ベース unified-diff 風 Render
+- [x] 3.1 (P) LCS ベース unified-diff 風 Render
   - `internal/diffview/diff.go` に `Render(before, after string) string` を実装
   - 行ベース LCS で対応関係を求め、追加 `+` / 削除 `-` / 不変 ` ` プレフィックスを付与
   - 不変連続範囲はハンク前後 3 行のみを残し、`@@ -X,Y +X,Y @@` ヘッダ風セパレータで圧縮
