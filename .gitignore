@@ -1,0 +1,5 @@
+# macOS
+.DS_Store
+
+# memory-distiller の一時的な中間アーティファクト
+.rill/
