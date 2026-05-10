@@ -2,7 +2,7 @@
 
 ## 1. プロジェクト基盤の整備
 
-- [ ] 1.1 Go モジュールと Justfile / .gitignore の初期化
+- [x] 1.1 Go モジュールと Justfile / .gitignore の初期化
   - `go mod init` で Go 1.25 モジュールを定義する（モジュールパスはリポジトリに合わせて確定）
   - `Justfile` に `just test` / `just lint` / `just build` / `just run` / `just fmt` の最小レシピを追加
   - `.gitignore` に `mdt` バイナリ・`coverage.out`・IDE 設定（`.vscode/`、`.idea/`）を追記

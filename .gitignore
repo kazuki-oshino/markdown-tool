@@ -3,3 +3,13 @@
 
 # memory-distiller の一時的な中間アーティファクト
 .rill/
+
+# mdt ビルド成果物
+/mdt
+
+# Go テストカバレッジ
+coverage.out
+
+# IDE 設定
+.vscode/
+.idea/
