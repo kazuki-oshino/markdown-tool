@@ -124,7 +124,7 @@
   - _Requirements: 5.2, 5.3, 6.1, 6.4_
   - _Depends: 1.4, 5.1_
 
-- [ ] 6.2 sort サブコマンド RunE 配線
+- [x] 6.2 sort サブコマンド RunE 配線
   - `cmd/mdt/sort.go` に `sort` サブコマンドを定義し、位置引数 1 個必須（`cobra.ExactArgs(1)`）と `--dry-run` フラグを宣言
   - RunE 内で `fileio.Read` → `kanban.Sort` を呼び、入力 == 出力なら no-op で exit 0 / `--dry-run` 指定なら `diffview.Render` を stdout 出力 / それ以外は `fileio.AtomicWrite` で上書き
   - 読み取り／書き込みエラーを stderr へ出力し `ExitRuntimeError = 1` で終了
@@ -163,3 +163,4 @@
 - task 4.1: `LineEndingMixed` enum 値は design.md table の 3 値定義に従い `meta.go` で必ず定義するが、`Read` は task 4.1 の「混在は最頻採用」ルールに従い CRLF/LF のいずれか優勢な方に集約して返す（同数時は LF にタイブレーク）ため、原則 `Read` からは emit されない。AtomicWrite (task 4.2) は `Meta.LineEnding == LineEndingMixed` を「Read 経由では発生しない予約値」として扱い、LF にフォールバックするか panic させるか方針を決めること（呼出側が `LineEndingMixed` を明示的に渡す経路は本 spec 範囲では存在しない）。
 - task 4.2: AtomicWrite の改行コード復元順序は「先に末尾 LF を `HasTrailingEOL` に従って除去 → 残り `\n` を `LineEnding` に応じて `\r\n` に展開」とする。逆順 (CRLF 展開 → 末尾除去) だと CRLF+`HasTrailingEOL=false` ケースで末尾の `\r` が孤立する不正バイト列が出る。`LineEndingMixed` は LF フォールバック (panic させない) で固定し、テストで契約として pin。失敗時の元ファイル不変は `defer` + `success` フラグで全早期リターン経路から `os.Remove(tmpPath)` を保証し、`os.Chmod` は temp ファイルにのみ適用する (destination に直接 chmod すると失敗時に元ファイルのモードが壊れる)。`os.Chmod(dir, 0o555)` ベースの失敗テストは macOS の root 実行で効かないため `if os.Geteuid() == 0 { t.Skip(...) }` ガードが必須。
 - task 6.1: cobra v1.10 系では `--help` の出力先は `cmd.OutOrStdout()`（既定は os.Stdout）。テストで stdout を捕捉する場合は `cmd.SetOut(&bytes.Buffer{})` と `cmd.SetErr(&bytes.Buffer{})` の両方を設定して隔離する。フラグ起源のエラーを usage error として分類するには `cmd.SetFlagErrorFunc` で sentinel/型付き error を返す方式が最小実装で確実 (RunE 内で発生する runtime error と区別できる)。`SilenceUsage: true` は RunE 失敗時の usage 二重表示を抑止する目的で必須 (cobra は既定で RunE エラーでも usage を流す)。TUI 起動経路は TTY 依存のため、テストは `var runTUI = tui.Run` のパッケージ変数経由で fake に差し替える方式が定石。task 1.4 で導入した `tools/depspin/` は cobra/bubbletea/teatest がそれぞれ `cmd/mdt`/`internal/tui`(本体・テスト) で実 import された時点で削除可能。削除後は `go mod tidy` で 3 パッケージが `go.mod require` に残ることを Grep で実測検証する。
+- task 6.2: cobra v1.10 で「使用方法を stderr に出す」契約を満たす際、`cmd.SetUsageFunc` を上書きしてその中で `c.UsageString()` を呼ぶと無限再帰でスタックオーバーフローになる (`UsageString` が内部で writer を一時差し替えして `c.Usage()` を呼ぶため、`Usage → UsageString → Usage` の循環)。回避策は `SetUsageFunc` を上書きせず、`Args` / `SetFlagErrorFunc` 内で `fmt.Fprint(cmd.ErrOrStderr(), cmd.UsageString())` を直接呼ぶ方式。この方式なら `UsageString` の writer 差し替えロジックは温存されつつ、出力先制御だけ呼び出し側で行える。なお cobra の `cmd.OutOrStderr()` は名前に反して「`SetOut` で渡された writer か、無ければ `os.Stderr`」を返す挙動なので、`SetOut`/`SetErr` 双方を渡すテストでは usage が stdout バッファに混じる。stderr 経路を確実にするには `ErrOrStderr()` を明示的に使う必要がある。

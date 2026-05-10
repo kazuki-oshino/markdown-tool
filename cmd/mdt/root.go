@@ -119,6 +119,11 @@ func newRootCommand() *cobra.Command {
 		return &usageError{err: err}
 	})
 
+	// サブコマンド登録 (tasks.md 6.2)。
+	// sort サブコマンドは cmd/mdt/sort.go 側で独自の UsageFunc / FlagErrorFunc を
+	// 設定しており、本ルートの設定を上書きする (subcommand 側で stderr へ usage を出す契約)。
+	cmd.AddCommand(newSortCommand())
+
 	return cmd
 }
 
