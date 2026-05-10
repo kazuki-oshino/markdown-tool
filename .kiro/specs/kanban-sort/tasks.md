@@ -135,7 +135,7 @@
 
 ## 7. End-to-End 検証
 
-- [ ] 7.1 sort サブコマンドの統合テスト
+- [x] 7.1 sort サブコマンドの統合テスト
   - `cmd/mdt/sort_integration_test.go` で `testdata/fileio/crlf_preserve.md.in` を `t.TempDir()` 配下にコピーし CRLF E2E ケースとして利用、LF / 末尾改行有無のサンプルは TempDir 配下にインライン生成
   - `mdt sort <file>` 実行後にファイルが期待通り上書きされ、改行コード（LF / CRLF）と末尾改行有無が保持されていること
   - `mdt sort --dry-run <file>` 実行後にファイルが不変で、stdout が `diffview.Render` の期待出力と一致すること
