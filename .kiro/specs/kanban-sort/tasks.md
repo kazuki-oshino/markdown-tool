@@ -94,7 +94,7 @@
   - _Boundary: internal/fileio_
   - _Depends: 1.1_
 
-- [ ] 4.2 AtomicWrite + Meta 再適用
+- [x] 4.2 AtomicWrite + Meta 再適用
   - `internal/fileio/write.go` に `AtomicWrite(path string, content string, meta Meta) error` を実装
   - LF 統一の `content` を `Meta.LineEnding` に応じた改行コードに復元し、`Meta.HasTrailingEOL` に従って末尾改行を付加／除去
   - 同一ディレクトリに一時ファイルを生成 → `os.Rename` でアトミック置換
@@ -161,3 +161,4 @@
 - task 1.4: `github.com/charmbracelet/x/exp/teatest` は安定タグを持たない実験的パッケージで `@latest` 解決値が `v0.0.0-<timestamp>-<commit>` 形式の Go pseudo-version になる（例: `v0.0.0-20260510005209-39224119bc89`）。これは Go semver の正規形式であり、`go.mod` への固定として有効。リリース版を期待する記述（design 等）は禁止し、解決値そのままを `go.mod` に保存する運用とする。
 - task 2.5: kanban 層のテスト用フィクスチャは `internal/kanban/testdata/` に配置する（design.md File Structure Plan の repo-root `testdata/kanban/` から移動）。理由は depguard `kanban-pure` ルールが `os` / `io` / `io/fs` を `internal/kanban/**/*.go` 全件（テスト含む）から禁止しており、repo-root の固定パスを `os.ReadFile` で読めない。代替として `//go:embed testdata/*.md.{in,out}` を採用するが、embed は親ディレクトリ参照不可のためフィクスチャを `internal/kanban/testdata/` に置く必要がある。Go 標準慣行（package 直下 testdata/）にも整合し、repo-root `testdata/fileio/` は fileio 層の改行コードフィクスチャ用にそのまま維持される。
 - task 4.1: `LineEndingMixed` enum 値は design.md table の 3 値定義に従い `meta.go` で必ず定義するが、`Read` は task 4.1 の「混在は最頻採用」ルールに従い CRLF/LF のいずれか優勢な方に集約して返す（同数時は LF にタイブレーク）ため、原則 `Read` からは emit されない。AtomicWrite (task 4.2) は `Meta.LineEnding == LineEndingMixed` を「Read 経由では発生しない予約値」として扱い、LF にフォールバックするか panic させるか方針を決めること（呼出側が `LineEndingMixed` を明示的に渡す経路は本 spec 範囲では存在しない）。
+- task 4.2: AtomicWrite の改行コード復元順序は「先に末尾 LF を `HasTrailingEOL` に従って除去 → 残り `\n` を `LineEnding` に応じて `\r\n` に展開」とする。逆順 (CRLF 展開 → 末尾除去) だと CRLF+`HasTrailingEOL=false` ケースで末尾の `\r` が孤立する不正バイト列が出る。`LineEndingMixed` は LF フォールバック (panic させない) で固定し、テストで契約として pin。失敗時の元ファイル不変は `defer` + `success` フラグで全早期リターン経路から `os.Remove(tmpPath)` を保証し、`os.Chmod` は temp ファイルにのみ適用する (destination に直接 chmod すると失敗時に元ファイルのモードが壊れる)。`os.Chmod(dir, 0o555)` ベースの失敗テストは macOS の root 実行で効かないため `if os.Geteuid() == 0 { t.Skip(...) }` ガードが必須。
