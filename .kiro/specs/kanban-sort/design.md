@@ -80,6 +80,25 @@
 
 採用パターンは **Hexagonal 風の薄いレイヤード分離（Option C）**。research.md で整理した 3 案のうち、純粋性 (R7) を最少パッケージで満たし、将来の `mdt format` への再利用余地を残せるため。
 
+#### 改行コード責務の分割（契約レベル）
+
+改行コード保持（R4.4）は **`fileio` 層の単独責務**であり、`kanban.Sort` は LF 統一の文字列のみを扱う。データフローは以下に固定する。
+
+```
+[disk bytes (LF or CRLF or Mixed)]
+   │  fileio.Read: 改行コード検出 → LF 統一に正規化 → Meta(改行種別, 末尾改行有無) を抽出
+   ▼
+[content: LF 統一文字列]  +  Meta
+   │  kanban.Sort(content): LF 入力 → LF 出力（純関数、改行コード非関知）
+   ▼
+[sorted: LF 統一文字列]  +  Meta（不変）
+   │  fileio.AtomicWrite(path, sorted, Meta): Meta を再適用（LF → 元の改行種別 + 末尾改行有無）
+   ▼
+[disk bytes (元の改行種別を保持)]
+```
+
+この責務分割により、(a) `kanban.Sort` を将来サブコマンドから直接呼ぶ際は LF 統一前提を満たす義務が呼出側にあること、(b) CRLF/末尾改行保持は `fileio` 層の責任で完結すること、を不変条件として固定する。
+
 ```mermaid
 graph TB
     subgraph CLI_Adapters
@@ -232,10 +251,11 @@ sequenceDiagram
 
 **Key Decisions**:
 
-- 純ドメイン (`Kanban`) には `os` / `io` を渡さず、文字列のみ流す（R7-3, R7-4）
+- 純ドメイン (`Kanban`) には `os` / `io` を渡さず、**LF 統一の文字列のみ**流す（R7-3, R7-4）
+- 改行コード保持は `fileio` 層の単独責務。`Read` で LF 正規化 + `Meta` 抽出 → `Sort` は LF→LF → `AtomicWrite` で `Meta` 再適用、の三段構成で R4-4 を満たす
 - 入力 == 出力の場合は書き込みも diff 出力も行わず即座に exit 0（R1-3, R2-2, R2-3）
 - `--dry-run` と通常書き込みは Cobra の `RunE` 内分岐で完全に分離（R4-1, R4-3, R4-6）
-- 書き込み時は `内容` と `Meta` を一緒に渡し、`fileio` 層内で改行コード／末尾改行を再構成（R4-4）
+- `--dry-run` 出力は `diffview.Render` の **LCS ベース unified-diff 風フォーマット**で固定（R4-2）
 
 ### `mdt`（引数なし）起動フロー
 
@@ -272,7 +292,7 @@ stateDiagram-v2
 | 4.1 | `--dry-run` で書き込み無し・差分を stdout 出力 | `cmd/mdt sort`, `internal/diffview` | `Render(before, after) string` | sort 主要フロー (dry-run 分岐) |
 | 4.2 | 差分が一目で識別可能なフォーマット | `internal/diffview` | 行単位 `+`/`-`/` ` プレフィックス | — |
 | 4.3 | 通常実行時は対象ファイルを上書き、バックアップなし | `cmd/mdt sort`, `internal/fileio` | `AtomicWrite(path, content, Meta)` | sort 主要フロー (write 分岐) |
-| 4.4 | 改行コード（LF/CRLF）と末尾改行の有無を保持 | `internal/fileio` | `Read` で `Meta` 抽出 / `AtomicWrite` で再付与 | — |
+| 4.4 | 改行コード（LF/CRLF）と末尾改行の有無を保持 | `internal/fileio`（単独責務）| `Read` で LF 正規化 + `Meta` 抽出 / `AtomicWrite` で `Meta` 再適用。`kanban.Sort` は LF 統一前提で改行コード非関知 | sort 主要フロー（fileio 三段構成） |
 | 4.5 | 書き込み失敗時に中間状態を残さず非ゼロ終了 | `internal/fileio`, `cmd/mdt sort` | temp file + `os.Rename` のアトミック書き込み | — |
 | 4.6 | `--dry-run` で内容変更を一切行わない | `cmd/mdt sort` | dry-run 分岐内で `AtomicWrite` を呼ばない | sort 主要フロー (dry-run 分岐) |
 | 5.1 | `sort` サブコマンドと位置引数 | `cmd/mdt sort` | Cobra `cobra.ExactArgs(1)` | — |
@@ -339,8 +359,9 @@ func Sort(input string) (string, error)
 ```
 
 - **Preconditions**: `input` は Go の `string` として有効（UTF-8 想定）。サイズ上限はメモリに依存する。
+- **Preconditions（追補）**: `input` の改行コードは **LF (`\n`) 統一**であること。CRLF や混在は呼出側（`fileio.Read`）で正規化済みである必要がある。`Sort` は改行コード変換を行わない。
 - **Postconditions**:
-  - 出力は入力と同じ改行コードシーケンス（行末の `\n` / `\r\n`）と末尾改行有無を保持する
+  - 出力の改行コードは **LF 統一**（入力と同一）。CRLF/末尾改行の復元は呼出側 `fileio.AtomicWrite` の責務であり、本関数は関知しない
   - 完了集側の非チェックボックス行は位置・内容ともに不変
   - 未完了パート側の非チェックボックス行は位置・内容ともに不変
   - 移動可能なブロックは「未完了パート内の出現順」で完了集末尾へ追加される
@@ -349,17 +370,35 @@ func Sort(input string) (string, error)
   - 入力の行集合と出力の行集合は完全一致（順序のみ変動）
   - `Sort(Sort(x)) == Sort(x)` （冪等性）
   - 同一入力は常に同一出力（決定性）
+  - 改行コード非変換: 入力に CRLF が混入しても、`Sort` はそれを LF へ正規化しない（呼出側責務違反として扱う）
 
 ##### 内部補助関数（パッケージ非公開）
 
 | 関数 | シグネチャ | 役割 |
 |------|------------|------|
-| `parseLines` | `func parseLines(input string) []line` | 行を `line{indent int, kind kind, raw string}` に分解 |
-| `indentDepth` | `func indentDepth(raw string) int` | タブ 1 個または半角 2 個以上を 1 段として深さ算出（混在時は半角に正規化） |
+| `parseLines` | `func parseLines(input string) []line` | 行を `line{indent int, kind kind, raw string}` に分解（行は LF で分割、`raw` は改行を含まない） |
+| `indentDepth` | `func indentDepth(raw string) int` | タブ 1 個または半角 2 個以上を 1 段として深さ算出（後述の正規化規則に従う） |
 | `findBoundary` | `func findBoundary(lines []line) int` | 最初の `[ ]` 行のインデックスを返す（無ければ `len(lines)`） |
-| `buildBlocks` | `func buildBlocks(lines []line, from int) []block` | `from` 以降の `[x]`/`[ ]` 行をルートとした親子ブロックを構築 |
-| `canMove` | `func canMove(b block) bool` | ブロックが「親も子孫も全て `[x]`」かを判定 |
-| `assemble` | `func assemble(prefix []line, completed []block, remaining []line, suffix string) string` | 結果文字列を改行コード保持のまま再構築 |
+| `buildBlocks` | `func buildBlocks(lines []line, from int) []block` | `from` 以降の **未完了パート全行**を対象に、最浅インデント行を**ルート**とする順序付きフォレストを構築する。ルートは `[x]` / `[ ]` / `kindOther` のいずれも含み、配下に深いインデント行を子孫として吸収する |
+| `canMove` | `func canMove(b block) bool` | ルート自身が `kindChecked` (`[x]`) かつ子孫の全 `[x]`/`[ ]` 行が `kindChecked` であるときに `true`。ルートが `kindUnchecked` (`[ ]`) または子孫に `kindUnchecked` が 1 つでもあれば `false`（R3.3, R3.4 を一括で吸収） |
+| `assemble` | `func assemble(prefix []line, completed []block, remaining []line) string` | 結果文字列を LF 統一で再構築する。改行コード復元は呼ばない |
+
+##### 走査と移動アルゴリズム（不変条件）
+
+1. `findBoundary` で完了集末尾位置 `b` を決定する。`b == len(lines)` の場合は `Sort(input) == input` を返す（R2.2, R2.3 早期リターン）
+2. `buildBlocks(lines, b)` で未完了パート全体を **順序付きフォレスト** として構築する。フォレストには `[x]` ルートも `[ ]` ルートも `kindOther` ルートも含む（**未完了パートの全行をフォレストとして網羅すること**を不変条件とする）
+3. フォレストを出現順に走査し、`canMove(root) == true` のルートは「移動候補列 `completed`」へ、それ以外は「未完了パート残留列 `remaining`」へ転送する。**子だけを抜き出すことは禁止**（R3.4 を構造的に保証）
+4. `assemble(prefix=lines[:b], completed, remaining)` で結果文字列を組み立てる
+5. 移動対象ブロック内部の行順序・インデント文字種・インデント幅は転送中に一切変更しない（R3.6）
+
+##### インデント混在の正規化規則
+
+- **基準単位**: 「1 段の深さ増加」を以下のいずれかと定義する:
+  - タブ文字 (`\t`) 1 個以上
+  - 半角スペース (` `) 2 個以上
+- **正規化**: `indentDepth(raw)` は行頭の連続空白を左から走査し、(a) タブ 1 個 = 深さ +1、(b) 連続する半角スペースは 2 個ごとに深さ +1（端数 1 個は切り捨てず深さに 1 段として加算しない＝半角 1 個は深さ 0 と同等扱い）。タブと半角の混在行はタブを優先解釈し、タブ後に続く半角は同一段の継続とみなす
+- **不変条件**: `indentDepth` は決定的かつ純関数。同一 `raw` に対し常に同一の整数を返す。テーブルテストでタブ単独 / 半角 2 / 半角 4 / 半角 1（無効）/ タブ+半角混在 を網羅する
+- **親子判定**: `child.indent > parent.indent` のときに親子関係。`==` は兄弟、`<` は親より浅い別ブロック
 
 **Implementation Notes**
 
@@ -378,8 +417,10 @@ func Sort(input string) (string, error)
 
 **Responsibilities & Constraints**
 
-- `before` と `after` の文字列を行配列に分解し、追加 (`+`) / 削除 (`-`) / 不変 (` `) のプレフィックスを付与した行を結合して返す
-- 外部 diff ライブラリには依存しない（自前 LCS or 単純な「全削除→全追加」表示）。本 spec では「移動された行・移動先・変更されなかった範囲が一目で識別可能」（4.2）を満たす最小実装を採用する
+- `before` と `after` の文字列を行配列（LF 分割）に分解し、**行ベース LCS（最長共通部分列）**で対応関係を求めたうえで、追加 (`+`) / 削除 (`-`) / 不変 (` `) のプレフィックスを付与した行を結合して返す（**「全削除→全追加」表示は採用しない**）
+- 並べ替え（移動）行は LCS 上では「削除側に `-`、挿入側に `+`」として両方に出現するため、ファイル内の元位置（`-`）と移動先（`+`）の双方が視覚的に識別可能となる（R4.2 の達成手段として **LCS 採用を契約に固定**）
+- **コンテキスト圧縮**: 不変範囲が連続する場合、ハンク前後 3 行のみを ` ` プレフィックスで残し、それ以外は `@@` ヘッダ風セパレータで省略する（unified-diff 風）
+- 外部 diff ライブラリには依存しない。LCS 実装は数十行〜百行規模の自前実装で完結（Go 標準 `strings`/`bufio` のみ使用、Allowed Dependencies は変更しない）
 - 副作用なし、決定的
 
 **Dependencies**
@@ -393,20 +434,58 @@ func Sort(input string) (string, error)
 ##### Service Interface
 
 ```go
-// Render は before と after の差分を unified-diff 風（行単位 +/-/space プレフィックス）
+// Render は before と after の行ベース LCS による差分を unified-diff 風
+// （行単位 +/-/space プレフィックス、コンテキスト 3 行、@@ ハンクヘッダ）
 // で返す。before == after の場合は空文字列を返す。
+//
+// 並べ替え行は LCS の都合で「削除位置に -, 挿入位置に +」として両方に現れる。
+// この出力規約により R4.2「移動された行・移動先・変更されなかった範囲が
+// 一目で識別可能」を満たす。
 func Render(before, after string) string
 ```
 
-- **Preconditions**: 両者とも有効な文字列。改行コード混在は許容。
-- **Postconditions**: 出力は人間可読な行プレフィックス形式。決定的。
-- **Invariants**: `before == after` ならば空文字列を返す。
+- **Preconditions**: 両者とも LF 統一文字列（`kanban.Sort` の出力規約と整合）。CRLF が含まれていた場合は LF に正規化したうえで diff を取る（表示の一貫性のため）。
+- **Postconditions**: 出力は unified-diff 風プレフィックス形式（`+` / `-` / ` ` + ハンクヘッダ `@@`）。決定的。
+- **Invariants**:
+  - `before == after` ならば空文字列を返す
+  - 同一入力に対し常に同一出力（決定性）
+  - LCS により「並べ替え行は `-` と `+` の両方に出現」する（R4.2 の構造的保証）
+
+##### 出力フォーマット例（契約）
+
+入力:
+
+```
+before:
+- [x] A
+- [ ] B
+- [x] C  ← B の下に未完了パートで完了化された
+
+after (Sort 後):
+- [x] A
+- [x] C  ← 完了集末尾へ移動
+- [ ] B
+```
+
+`Render(before, after)` の期待出力:
+
+```
+@@ -1,3 +1,3 @@
+ - [x] A
++- [x] C
+ - [ ] B
+-- [x] C
+```
+
+- 不変行 `- [x] A` と `- [ ] B` は ` ` プレフィックスで残る
+- 移動された `- [x] C` は元位置に `-`、移動先に `+` として両方に出現
+- 完全一致時は空文字列
 
 **Implementation Notes**
 
 - Integration: `cmd/mdt sort` の `--dry-run` 分岐から呼ばれ、戻り値は `os.Stdout` に書き出される
-- Validation: ゴールデンファイルで代表ケース（移動 1 件、複数件、no-op）を固定
-- Risks: 大規模ファイルでの LCS 計算量。本 spec の典型サイズ（個人用 todo, ≤ 数千行）では問題にならない見込みだが、最小実装では「ブロック単位の追加／削除のみ表示」も許容する
+- Validation: ゴールデンファイルで代表ケース（移動 1 件、複数件、no-op、親子ブロック移動）を固定。ハンクヘッダの行番号も期待値に含める
+- Risks: 大規模ファイルでの LCS 計算量は O(N×M)。本 spec の典型サイズ（個人用 todo, ≤ 数千行）では十分許容範囲（メモリ数十 MB 以下、実時間 100ms 以下を想定）
 
 ### Side Effects
 
@@ -449,17 +528,31 @@ type Meta struct {
 }
 
 // Read はファイルを読み込み、改行コード種別と末尾改行有無を Meta に返す。
-// content は LF 統一に正規化した文字列（Sort はそれを前提に動く）。
+// content は LF 統一に正規化した文字列。
+//
+// 改行コード保持の責務分担:
+//   - Read:        disk bytes → 検出 → LF 統一に正規化, Meta を抽出
+//   - kanban.Sort: LF 統一文字列のまま処理（改行コード非関知）
+//   - AtomicWrite: LF 統一文字列 + Meta → 元の改行コードに復元してから書き込む
+//
+// この三段構成により、kanban.Sort の純粋性と R4.4（改行コード保持）を両立する。
 func Read(path string) (content string, meta Meta, err error)
 
-// AtomicWrite は content（LF 統一）に Meta を再適用してから、
+// AtomicWrite は content（LF 統一前提）に Meta を再適用してから、
 // 同一ディレクトリの一時ファイル経由で path をアトミックに上書きする。
+//
+// content に CRLF が含まれていた場合の挙動は未定義（呼出側違反）。
+// kanban.Sort の出力規約により LF 統一が保証される前提で動作する。
 func AtomicWrite(path string, content string, meta Meta) error
 ```
 
-- **Preconditions**: `path` は読み書き可能。書き込み先ディレクトリへの書き込み権限がある。
-- **Postconditions**: 書き込み成功時、`path` の内容は `content + Meta` 適用後のバイト列に置換され、改行コード／末尾改行が保持される。失敗時、`path` の内容と一時ファイルは元の状態に復帰する。
-- **Invariants**: アトミック書き込みは「成功か無変更か」のいずれかのみ。中間破損は発生しない。
+- **Preconditions**:
+  - `path` は読み書き可能。書き込み先ディレクトリへの書き込み権限がある
+  - `AtomicWrite` の `content` は **LF 統一文字列**であること（CRLF が含まれていれば呼出側違反）
+- **Postconditions**: 書き込み成功時、`path` の内容は `content` の各 `\n` を `Meta.LineEnding` に応じた改行コードに復元し、`Meta.HasTrailingEOL` に従って末尾改行を付加／除去したバイト列に置換される。失敗時、`path` の内容と一時ファイルは元の状態に復帰する。
+- **Invariants**:
+  - アトミック書き込みは「成功か無変更か」のいずれかのみ。中間破損は発生しない
+  - 改行コード保持は本層の単独責務であり、`kanban` / `diffview` 層には漏らさない
 
 **Implementation Notes**
 
