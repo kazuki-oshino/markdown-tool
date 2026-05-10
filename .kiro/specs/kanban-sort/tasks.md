@@ -42,7 +42,7 @@
   - `parser_test.go` のテーブルテストで「タブ単独」「半角 2」「半角 4」「半角 1（無効）」「タブ+半角混在」の各ケースが期待 depth と kind を返すこと
   - _Requirements: 3.1_
 
-- [ ] 2.2 完了集／未完了パート境界判定
+- [x] 2.2 完了集／未完了パート境界判定
   - `internal/kanban/boundary.go` に `findBoundary(lines []line) int` を実装
   - 最初の `kindUnchecked` 行のインデックスを返し、無ければ `len(lines)` を返す
   - `boundary_test.go` で「中間に `[ ]` あり」「先頭が `[ ]`」「`[ ]` なし」「空ファイル」の各ケースで期待 index を返すこと
