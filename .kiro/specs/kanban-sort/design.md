@@ -57,9 +57,9 @@
 ### Allowed Dependencies
 
 - **Go 1.25+** ランタイム（標準ライブラリ）
-- **`github.com/spf13/cobra` v1.10+**: サブコマンド・フラグ解析・終了コード規約・`--help` 自動生成
-- **`github.com/charmbracelet/bubbletea` v1 系**: TUI スケルトンの Model/Update/View ループ
-- **`github.com/charmbracelet/x/exp/teatest`**（テスト時のみ）: TUI のヘッドレステスト
+- **`github.com/spf13/cobra`**: サブコマンド・フラグ解析・終了コード規約・`--help` 自動生成。バージョンは `go get github.com/spf13/cobra@latest` の実測値を `go.mod` に固定する（v1.10 系の事前指定は行わず、tasks.md 1.4 の手順に委譲）
+- **`github.com/charmbracelet/bubbletea`**: TUI スケルトンの Model/Update/View ループ。バージョンは `go get github.com/charmbracelet/bubbletea@latest` の実測値を `go.mod` に固定（API 互換性は v1 系前提だが、固定値の確定は tasks.md 1.4 に委譲）
+- **`github.com/charmbracelet/x/exp/teatest`**（テスト時のみ）: TUI のヘッドレステスト。同じく `@latest` を `go.mod` に固定
 - **`just`**: タスクランナ（CI 想定でなく開発者ローカルでの統一）
 - 上記以外の追加依存は本 spec 範囲では導入しない（差分生成・diff ライブラリ等は自前最小実装で完結させる）
 
@@ -143,8 +143,8 @@ graph TB
 
 | Layer | Choice / Version | Role in Feature | Notes |
 |-------|------------------|-----------------|-------|
-| CLI | `github.com/spf13/cobra` v1.10+ | サブコマンド `sort` 定義、`--dry-run` フラグ、`--help`、終了コード | brief で確定。Cobra のデフォルト挙動（使用方法不正でコード 2）を踏襲 |
-| TUI | `github.com/charmbracelet/bubbletea` v1 系 | 引数なし起動時の Model/Update/View スケルトン | `q` / `Ctrl+C` で `tea.Quit` |
+| CLI | `github.com/spf13/cobra`（`@latest` 実測値を `go.mod` に固定） | サブコマンド `sort` 定義、`--dry-run` フラグ、`--help`、終了コード | brief で確定。バージョン解決は tasks.md 1.4 で `go get @latest` → `go.mod` 固定。Cobra のデフォルト挙動（使用方法不正でコード 2）を踏襲 |
+| TUI | `github.com/charmbracelet/bubbletea`（`@latest` 実測値を `go.mod` に固定） | 引数なし起動時の Model/Update/View スケルトン | バージョン解決は tasks.md 1.4 で `go get @latest` → `go.mod` 固定。`q` / `Ctrl+C` で `tea.Quit` |
 | Domain | Go 1.25 標準ライブラリのみ | `internal/kanban` の純ロジック | 副作用パッケージ import を禁止（depguard） |
 | File I/O | Go 1.25 標準ライブラリ (`os`, `io`, `bufio`) | 読み込み・改行コード検出・アトミック書き込み | 同一ディレクトリに temp file → `os.Rename` |
 | Diff View | Go 1.25 標準ライブラリのみ | `--dry-run` 用の最小差分フォーマット生成 | 自前 LCS or 行単位 `+`/`-`/` ` プレフィックス。外部 diff ライブラリは導入しない |
@@ -193,17 +193,18 @@ graph TB
 │   └── golangci/
 │       └── .golangci.yml                   # depguard で internal/kanban の import 制限
 └── testdata/
-    └── kanban/
-        ├── basic_unchanged.md.in           # ゴールデン入力
-        ├── basic_unchanged.md.out          # 期待出力
-        ├── single_x_move.md.in
-        ├── single_x_move.md.out
-        ├── parent_child_all_done.md.in
-        ├── parent_child_all_done.md.out
-        ├── parent_done_child_open.md.in    # 親完了/子未完 → 移動禁止
-        ├── parent_done_child_open.md.out
-        ├── child_done_parent_open.md.in    # 子完了/親未完 → 移動禁止
-        ├── child_done_parent_open.md.out
+    ├── kanban/                             # kanban 層（LF 統一前提）のゴールデン
+    │   ├── basic_unchanged.md.in
+    │   ├── basic_unchanged.md.out
+    │   ├── single_x_move.md.in
+    │   ├── single_x_move.md.out
+    │   ├── parent_child_all_done.md.in
+    │   ├── parent_child_all_done.md.out
+    │   ├── parent_done_child_open.md.in    # 親完了/子未完 → 移動禁止
+    │   ├── parent_done_child_open.md.out
+    │   ├── child_done_parent_open.md.in    # 子完了/親未完 → 移動禁止
+    │   └── child_done_parent_open.md.out
+    └── fileio/                             # fileio 層（改行コード保持）のフィクスチャ
         ├── crlf_preserve.md.in             # CRLF 保持
         └── crlf_preserve.md.out
 ```
