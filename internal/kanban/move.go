@@ -66,13 +66,17 @@ func flattenBlock(b block) []line {
 	return out
 }
 
-// assemble は完了集 prefix・移動候補 completed・未完了パート残留 remaining を
+// assemble は完了集 prefix・移動候補 completed・gap・未完了パート残留 remaining を
 // この順で連結し、LF 統一文字列として再構築する。
 //
 // 仕様 (tasks.md 2.5 / design.md "走査と移動アルゴリズム" 4):
-//   - prefix:    findBoundary 直前までの行（完了集側）。raw をそのまま転送する。
+//   - prefix:    findInsertionIndex で確定した挿入位置までの行（完了集の最後の [x]
+//     サブツリーまで）。raw をそのまま転送する。
 //   - completed: 移動可ルートのフォレスト。flattenBlock で木順序に展開し、prefix の直後に追加する
-//     （= 完了集末尾への追記。R1.2「未完了パート内の出現順序を保ったまま、完了集末尾へ追記」）。
+//     （= 最後の完了ブロック直後への追記。R1.2「未完了パート内の出現順序を保ったまま、
+//     完了集末尾へ追記」のうち「末尾」の解釈を「最後の [x] サブツリー直後」に固定する）。
+//   - gap:       完了集側の挿入位置と未完了パート境界の間に挟まる kindOther 行（空行・
+//     見出し等）。移動ブロック追記後にそのまま挿入し、remaining の直前に置く。
 //   - remaining: 移動不可のルート群を flattenBlock 済みで連結した行列。
 //     未完了パート内の元の出現順を保持する (R3.6)。
 //
@@ -81,8 +85,8 @@ func flattenBlock(b block) []line {
 //   - 末尾改行は最終要素 (raw="") の存在で表現される。strings.Join でラウンドトリップ。
 //
 // 純関数: 引数を読むのみで副作用を持たない。strings.Join のみに依存。
-func assemble(prefix []line, completed []block, remaining []line) string {
-	raws := make([]string, 0, len(prefix)+len(remaining))
+func assemble(prefix []line, completed []block, gap []line, remaining []line) string {
+	raws := make([]string, 0, len(prefix)+len(gap)+len(remaining))
 	for _, l := range prefix {
 		raws = append(raws, l.raw)
 	}
@@ -90,6 +94,9 @@ func assemble(prefix []line, completed []block, remaining []line) string {
 		for _, l := range flattenBlock(b) {
 			raws = append(raws, l.raw)
 		}
+	}
+	for _, l := range gap {
+		raws = append(raws, l.raw)
 	}
 	for _, l := range remaining {
 		raws = append(raws, l.raw)

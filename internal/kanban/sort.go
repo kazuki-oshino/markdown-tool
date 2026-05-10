@@ -1,7 +1,7 @@
 package kanban
 
 // Sort は LF 統一済み Markdown 文字列を入力に、未完了パート内の移動可能な
-// [x] ブロックを完了集末尾へ移動した結果を返す決定的純関数。
+// [x] ブロックを「完了集の最後の [x] サブツリー直後」へ移動した結果を返す決定的純関数。
 //
 // 仕様 (tasks.md 2.5 / design.md "Pure Domain / internal/kanban" の Service Interface /
 //
@@ -11,6 +11,9 @@ package kanban
 //   - 入力 == 出力（移動対象なし／未完了パートなし／完了集空）も等価文字列を返す（早期リターン）。
 //   - 移動対象ブロックの内部行順序・インデント文字種・インデント幅は保持する。
 //   - 同一入力に対し常に同一出力を返す（決定性）。Sort(Sort(x)) == Sort(x)（冪等性）。
+//   - 完了集の最後の [x] サブツリーと未完了パート境界の間にある kindOther 行（空行・
+//     見出し等）は「移動ブロックより後ろ」に残す。これにより [x] と [ ] の間にある
+//     空行が破壊されず、見た目上のセクション区切りが保たれる。
 //
 // アルゴリズム (design.md "走査と移動アルゴリズム"):
 //  1. parseLines で line 配列に分解
@@ -22,7 +25,8 @@ package kanban
 //  4. 各ルートに canMove を適用し、true なら completed、false なら remaining
 //     （子だけを抜き出すことは禁止: R3.4 を構造的に保証）
 //  5. completed が空なら入力不変として早期リターン (R1.3)
-//  6. assemble(prefix, completed, remaining) で LF 統一文字列を再構築
+//  6. findInsertionIndex で完了集の最後の [x] サブツリー直後を挿入位置 i に確定
+//  7. assemble(lines[:i], completed, lines[i:b], remaining) で LF 統一文字列を再構築
 //
 // error は将来の致命的不整合（UTF-8 不正等）専用で、本実装では常に nil を返す
 // （design.md "Service Interface" Preconditions / Implementation Notes の MVP 方針）。
@@ -58,5 +62,6 @@ func Sort(input string) (string, error) {
 		return input, nil
 	}
 
-	return assemble(lines[:boundary], completed, remaining), nil
+	insertIdx := findInsertionIndex(lines, boundary)
+	return assemble(lines[:insertIdx], completed, lines[insertIdx:boundary], remaining), nil
 }

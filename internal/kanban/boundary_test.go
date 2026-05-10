@@ -83,3 +83,89 @@ func TestFindBoundary(t *testing.T) {
 		})
 	}
 }
+
+// TestFindInsertionIndex は完了集内の挿入位置決定 (findInsertionIndex) を検証する。
+//
+// 仕様:
+//   - 完了集 (lines[:boundary]) の最後の kindChecked 行を見つけ、その行の indent より
+//     深い後続の連続行（子孫サブツリー）を吸収した上で「サブツリー直後」のインデックスを返す。
+//   - 完了集に kindChecked が 1 つも無ければ boundary をそのまま返す（フォールバック）。
+//
+// 設計上の意図:
+//   - 「[x] と [ ] の間にある空行 / 見出し等の kindOther 行は、移動ブロックより後ろに残す」
+//     という Sort の挿入位置契約を、Sort のゴールデンテストとは独立に固定する。
+func TestFindInsertionIndex(t *testing.T) {
+	t.Parallel()
+
+	mk := func(indent int, k kind, raw string) line {
+		return line{indent: indent, kind: k, raw: raw}
+	}
+
+	cases := []struct {
+		name     string
+		lines    []line
+		boundary int
+		want     int
+	}{
+		{
+			// 完了集末尾に空行が複数あるケース。
+			// 最後の [x] は index 1。空行 (index 2,3) は indent 0 で子孫扱いされない。
+			// → 挿入位置は 2 (= [x] done B の直後、空行より前)。
+			name: "trailing_blanks_after_last_checked",
+			lines: []line{
+				mk(0, kindChecked, "- [x] done A"),
+				mk(0, kindChecked, "- [x] done B"),
+				mk(0, kindOther, ""),
+				mk(0, kindOther, ""),
+				mk(0, kindUnchecked, "- [ ] open"),
+			},
+			boundary: 4,
+			want:     2,
+		},
+		{
+			// 最後の [x] にインデント深い子孫 (kindOther / kindChecked) が続くケース。
+			// 子孫範囲は indent > 親 で連続するため吸収され、サブツリー直後を返す。
+			name: "checked_with_indented_descendants",
+			lines: []line{
+				mk(0, kindChecked, "- [x] parent"),
+				mk(1, kindOther, "  - sub note"),
+				mk(1, kindChecked, "  - [x] child done"),
+				mk(0, kindUnchecked, "- [ ] open"),
+			},
+			boundary: 3,
+			want:     3,
+		},
+		{
+			// 完了集に kindChecked が無い (見出し行のみ) ケース。
+			// フォールバックで boundary をそのまま返す。
+			name: "no_checked_in_prefix",
+			lines: []line{
+				mk(0, kindOther, "## Heading"),
+				mk(0, kindUnchecked, "- [ ] open"),
+			},
+			boundary: 1,
+			want:     1,
+		},
+		{
+			// 最後の [x] が境界直前にあり、間に kindOther が無いケース。
+			// 子孫もないため挿入位置は boundary と一致する。
+			name: "checked_immediately_before_boundary",
+			lines: []line{
+				mk(0, kindChecked, "- [x] done"),
+				mk(0, kindUnchecked, "- [ ] open"),
+			},
+			boundary: 1,
+			want:     1,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := findInsertionIndex(tc.lines, tc.boundary)
+			if got != tc.want {
+				t.Errorf("findInsertionIndex(%q) = %d, want %d", tc.name, got, tc.want)
+			}
+		})
+	}
+}
