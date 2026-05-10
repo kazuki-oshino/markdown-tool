@@ -35,7 +35,7 @@
 
 ## 2. internal/kanban: 純ドメイン実装
 
-- [ ] 2.1 行パーサと indentDepth 正規化
+- [x] 2.1 行パーサと indentDepth 正規化
   - `internal/kanban/parser.go` に `line` / `kind`（`kindOther` / `kindUnchecked` / `kindChecked`）と `parseLines(input string) []line` / `indentDepth(raw string) int` を実装
   - インデント正規化規則: タブ 1 個 = 深さ +1、半角スペース 2 個ごとに +1、半角 1 個は深さ 0、タブと半角混在はタブ優先で同段継続
   - `[x]` / `[X]` を `kindChecked`、`[ ]` を `kindUnchecked`、それ以外を `kindOther` に分類
