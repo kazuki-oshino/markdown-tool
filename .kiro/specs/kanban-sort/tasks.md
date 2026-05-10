@@ -115,7 +115,7 @@
 
 ## 6. cmd/mdt: CLI 統合
 
-- [ ] 6.1 ルートコマンド + 終了コード + TUI 起動分岐
+- [x] 6.1 ルートコマンド + 終了コード + TUI 起動分岐
   - `cmd/mdt/exitcode.go` に `ExitOK = 0` / `ExitRuntimeError = 1` / `ExitUsageError = 2` を定義
   - `cmd/mdt/root.go` で Cobra ルートコマンドを構築し、`--help` / `-h` で利用方法を表示して終了コード 0 を返す
   - サブコマンド未指定 & 引数なしの場合は RunE 内で `tui.Run()` を呼び出し、戻り値 nil で終了コード 0
@@ -162,3 +162,4 @@
 - task 2.5: kanban 層のテスト用フィクスチャは `internal/kanban/testdata/` に配置する（design.md File Structure Plan の repo-root `testdata/kanban/` から移動）。理由は depguard `kanban-pure` ルールが `os` / `io` / `io/fs` を `internal/kanban/**/*.go` 全件（テスト含む）から禁止しており、repo-root の固定パスを `os.ReadFile` で読めない。代替として `//go:embed testdata/*.md.{in,out}` を採用するが、embed は親ディレクトリ参照不可のためフィクスチャを `internal/kanban/testdata/` に置く必要がある。Go 標準慣行（package 直下 testdata/）にも整合し、repo-root `testdata/fileio/` は fileio 層の改行コードフィクスチャ用にそのまま維持される。
 - task 4.1: `LineEndingMixed` enum 値は design.md table の 3 値定義に従い `meta.go` で必ず定義するが、`Read` は task 4.1 の「混在は最頻採用」ルールに従い CRLF/LF のいずれか優勢な方に集約して返す（同数時は LF にタイブレーク）ため、原則 `Read` からは emit されない。AtomicWrite (task 4.2) は `Meta.LineEnding == LineEndingMixed` を「Read 経由では発生しない予約値」として扱い、LF にフォールバックするか panic させるか方針を決めること（呼出側が `LineEndingMixed` を明示的に渡す経路は本 spec 範囲では存在しない）。
 - task 4.2: AtomicWrite の改行コード復元順序は「先に末尾 LF を `HasTrailingEOL` に従って除去 → 残り `\n` を `LineEnding` に応じて `\r\n` に展開」とする。逆順 (CRLF 展開 → 末尾除去) だと CRLF+`HasTrailingEOL=false` ケースで末尾の `\r` が孤立する不正バイト列が出る。`LineEndingMixed` は LF フォールバック (panic させない) で固定し、テストで契約として pin。失敗時の元ファイル不変は `defer` + `success` フラグで全早期リターン経路から `os.Remove(tmpPath)` を保証し、`os.Chmod` は temp ファイルにのみ適用する (destination に直接 chmod すると失敗時に元ファイルのモードが壊れる)。`os.Chmod(dir, 0o555)` ベースの失敗テストは macOS の root 実行で効かないため `if os.Geteuid() == 0 { t.Skip(...) }` ガードが必須。
+- task 6.1: cobra v1.10 系では `--help` の出力先は `cmd.OutOrStdout()`（既定は os.Stdout）。テストで stdout を捕捉する場合は `cmd.SetOut(&bytes.Buffer{})` と `cmd.SetErr(&bytes.Buffer{})` の両方を設定して隔離する。フラグ起源のエラーを usage error として分類するには `cmd.SetFlagErrorFunc` で sentinel/型付き error を返す方式が最小実装で確実 (RunE 内で発生する runtime error と区別できる)。`SilenceUsage: true` は RunE 失敗時の usage 二重表示を抑止する目的で必須 (cobra は既定で RunE エラーでも usage を流す)。TUI 起動経路は TTY 依存のため、テストは `var runTUI = tui.Run` のパッケージ変数経由で fake に差し替える方式が定石。task 1.4 で導入した `tools/depspin/` は cobra/bubbletea/teatest がそれぞれ `cmd/mdt`/`internal/tui`(本体・テスト) で実 import された時点で削除可能。削除後は `go mod tidy` で 3 パッケージが `go.mod require` に残ることを Grep で実測検証する。
