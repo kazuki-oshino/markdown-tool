@@ -104,7 +104,7 @@
 
 ## 5. internal/tui: Bubble Tea スケルトン
 
-- [ ] 5.1 (P) Run + 初期画面 + キー終了 + teatest
+- [x] 5.1 (P) Run + 初期画面 + キー終了 + teatest
   - `internal/tui/skeleton.go` に Bubble Tea Model/Update/View と公開関数 `Run() error` を実装
   - 初期画面に固定テキスト（例: `mdt - press q or Ctrl+C to quit`）を表示
   - `q` キーまたは `Ctrl+C` 入力で `tea.Quit` を返し、`Run` は nil を返す
