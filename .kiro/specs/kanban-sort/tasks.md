@@ -48,7 +48,7 @@
   - `boundary_test.go` で「中間に `[ ]` あり」「先頭が `[ ]`」「`[ ]` なし」「空ファイル」の各ケースで期待 index を返すこと
   - _Requirements: 2.1, 2.2, 2.3_
 
-- [ ] 2.3 親子フォレスト構築（buildBlocks）
+- [x] 2.3 親子フォレスト構築（buildBlocks）
   - `internal/kanban/tree.go` に `block` 型と `buildBlocks(lines []line, from int) []block` を実装
   - `from` 以降の未完了パートを最浅インデント行をルートとする順序付きフォレストとして構築し、`child.indent > parent.indent` 行を子孫に吸収する
   - 未完了パートの全行（`[x]` / `[ ]` / `kindOther` ルート含む）がフォレスト要素として網羅されること
