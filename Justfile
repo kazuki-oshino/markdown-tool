@@ -39,9 +39,13 @@ setup-tools:
     @echo "  - golangci-lint v2.x  (本リポジトリの設定は v2 形式)"
     @echo "  - ast-grep      v0.42 以上"
 
-# mdt バイナリをリポジトリ直下にビルド
+# mdt をビルドし、$GOPATH/bin にもインストールする（どこからでも `mdt` で呼べる）
+# 前提: `$(go env GOPATH)/bin` が PATH に通っていること
+# - ./mdt: 動作確認・smoke test 用にリポジトリ直下へ出力
+# - $GOPATH/bin/mdt: PATH 経由で呼び出せる本体
 build:
     go build -o mdt ./cmd/mdt
+    go install ./cmd/mdt
 
 # 開発実行（引数なし起動）
 run:
