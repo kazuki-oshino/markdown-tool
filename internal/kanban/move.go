@@ -1,5 +1,7 @@
 package kanban
 
+import "strings"
+
 // canMove はブロック b が完了集末尾へ移動可能かを判定する。
 //
 // 仕様 (tasks.md 2.4 / requirements.md R1.2, R3.3, R3.4, R3.5 /
@@ -46,4 +48,51 @@ func hasUncheckedDescendant(children []block) bool {
 		}
 	}
 	return false
+}
+
+// flattenBlock はブロック b（root + 子孫）を木順序で line 配列に展開する。
+//
+// 仕様 (tasks.md 2.5 / design.md "走査と移動アルゴリズム"):
+//   - head を先頭に置き、children を順序通りに再帰展開して連結する。
+//   - 元の行順 (root → 第 1 子の subtree → 第 2 子の subtree → ...) を保持する。
+//   - インデント文字種・幅は line.raw に保持されているため、本関数は値の変換を行わない。
+//
+// 純関数: ブロックを読むのみで副作用を持たない。assemble の補助。
+func flattenBlock(b block) []line {
+	out := []line{b.head}
+	for _, c := range b.children {
+		out = append(out, flattenBlock(c)...)
+	}
+	return out
+}
+
+// assemble は完了集 prefix・移動候補 completed・未完了パート残留 remaining を
+// この順で連結し、LF 統一文字列として再構築する。
+//
+// 仕様 (tasks.md 2.5 / design.md "走査と移動アルゴリズム" 4):
+//   - prefix:    findBoundary 直前までの行（完了集側）。raw をそのまま転送する。
+//   - completed: 移動可ルートのフォレスト。flattenBlock で木順序に展開し、prefix の直後に追加する
+//     （= 完了集末尾への追記。R1.2「未完了パート内の出現順序を保ったまま、完了集末尾へ追記」）。
+//   - remaining: 移動不可のルート群を flattenBlock 済みで連結した行列。
+//     未完了パート内の元の出現順を保持する (R3.6)。
+//
+// 出力規約:
+//   - 改行コード復元は呼び出し側 (fileio.AtomicWrite) の責務。本関数は LF 区切りのみ。
+//   - 末尾改行は最終要素 (raw="") の存在で表現される。strings.Join でラウンドトリップ。
+//
+// 純関数: 引数を読むのみで副作用を持たない。strings.Join のみに依存。
+func assemble(prefix []line, completed []block, remaining []line) string {
+	raws := make([]string, 0, len(prefix)+len(remaining))
+	for _, l := range prefix {
+		raws = append(raws, l.raw)
+	}
+	for _, b := range completed {
+		for _, l := range flattenBlock(b) {
+			raws = append(raws, l.raw)
+		}
+	}
+	for _, l := range remaining {
+		raws = append(raws, l.raw)
+	}
+	return strings.Join(raws, "\n")
 }
