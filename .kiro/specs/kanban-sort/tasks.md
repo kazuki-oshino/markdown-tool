@@ -17,7 +17,7 @@
   - 故意に違反 import を入れたダミーファイルで `just lint` が非ゼロ終了することを確認後、ダミーは削除して状態を元に戻す
   - _Requirements: 1.4, 7.2, 7.3, 7.4_
 
-- [ ] 1.3 ゴールデンテスト用 testdata フィクスチャの準備
+- [x] 1.3 ゴールデンテスト用 testdata フィクスチャの準備
   - `testdata/kanban/` に kanban 層用の LF 統一フィクスチャ（`basic_unchanged` / `single_x_move` / `parent_child_all_done` / `parent_done_child_open` / `child_done_parent_open`）の `*.md.in` / `*.md.out` ペアを作成
   - kanban 配下のフィクスチャはすべて LF 改行のみとし、CRLF や Mixed は混入させない（kanban.Sort の LF 統一前提と整合）
   - `testdata/fileio/` に fileio 層用の `crlf_preserve.md.in` / `.md.out` を配置し、CRLF 改行で実保存（design.md File Structure Plan の更新後レイアウトに整合）

@@ -1,0 +1,5 @@
+# fileio 層の改行コード保持テスト用フィクスチャは、
+# Git の autocrlf 変換で CRLF が LF に丸められないよう -text を明示する。
+# (kanban 層フィクスチャは LF 統一前提のため対象外)
+testdata/fileio/*.md.in -text
+testdata/fileio/*.md.out -text
