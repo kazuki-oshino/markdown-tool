@@ -1,0 +1,49 @@
+package kanban
+
+// canMove はブロック b が完了集末尾へ移動可能かを判定する。
+//
+// 仕様 (tasks.md 2.4 / requirements.md R1.2, R3.3, R3.4, R3.5 /
+//
+//	design.md "内部補助関数（パッケージ非公開）" の canMove 行 +
+//	"走査と移動アルゴリズム（不変条件）" 3):
+//   - ルート b.head 自身が kindChecked であり、かつ
+//     子孫を再帰的に走査して全ての kindChecked / kindUnchecked 行が kindChecked
+//     (= kindUnchecked が 1 つも存在しない) ときのみ true を返す。
+//   - ルートが kindUnchecked または kindOther の時点で false (R3.4 / R3.5 を構造的に吸収)。
+//   - 子孫に kindUnchecked が 1 つでも残っていれば false (R3.3)。
+//   - kindOther 子孫 (memo / 空行など) は判定中立で、true / false いずれにも寄与しない。
+//
+// 設計上の意図:
+//   - canMove は「ルート単位で塊として移動できるか」のみを判定する。
+//     子だけを抜き出して移動することは構造的に禁止されており (design.md 走査アルゴリズム 3)、
+//     呼出側 (Sort 内のフォレスト走査) は root に対してのみ canMove を評価する。
+//   - 純関数: ブロックを読むのみで副作用を持たない。time / rand / I/O への依存なし
+//     (depguard / ast-grep の import 制約を遵守)。
+func canMove(b block) bool {
+	// ルートが kindChecked でなければ早期に false。
+	// kindUnchecked: R3.4「親未完なら子完了でも単独移動禁止」を構造的に吸収。
+	// kindOther:    そもそも移動対象外 (checkbox を持たない見出し / メモ等)。
+	if b.head.kind != kindChecked {
+		return false
+	}
+	// 子孫に kindUnchecked が 1 つでもあれば false (R3.3)。
+	return !hasUncheckedDescendant(b.children)
+}
+
+// hasUncheckedDescendant は children 配下を再帰走査し、kindUnchecked 行が
+// 1 つでも存在すれば true を返す。kindOther / kindChecked のみのときは false。
+//
+// canMove の補助関数。kind に対する判定の対称性のため独立させ、
+// 「親が kindChecked でも子孫に [ ] があれば false」(R3.3) の不変条件を
+// 単一の責務で表現する。
+func hasUncheckedDescendant(children []block) bool {
+	for _, c := range children {
+		if c.head.kind == kindUnchecked {
+			return true
+		}
+		if hasUncheckedDescendant(c.children) {
+			return true
+		}
+	}
+	return false
+}

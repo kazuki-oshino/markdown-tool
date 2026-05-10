@@ -55,7 +55,7 @@
   - `tree_test.go` で「フラットなルート列」「ネスト 2 段」「兄弟と従兄弟混在」「`kindOther` ルート混在」の各ケースで期待構造が得られること
   - _Requirements: 3.2_
 
-- [ ] 2.4 ブロック移動可否判定（canMove）
+- [x] 2.4 ブロック移動可否判定（canMove）
   - `internal/kanban/move.go` に `canMove(b block) bool` を実装
   - ルート自身が `kindChecked` かつ子孫の全 `[x]` / `[ ]` 行が `kindChecked` のとき true、それ以外 false（R3.3 と R3.4 を構造的に一括吸収）
   - `move_test.go` で「親子全完了」「親完了/子未完」「子完了/親未完」「ルートが `kindOther`」「単独 `[x]` ルート」の各ケースが期待真偽値を返すこと
