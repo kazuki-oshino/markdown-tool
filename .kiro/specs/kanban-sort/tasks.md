@@ -9,7 +9,7 @@
   - `just build` が空の `cmd/mdt/main.go`（最小スタブ）でコンパイル成功し、`mdt` バイナリを生成する
   - _Requirements: 1.4_
 
-- [ ] 1.2 静的解析ルール（depguard + ast-grep）の整備
+- [x] 1.2 静的解析ルール（depguard + ast-grep）の整備
   - `tools/golangci/.golangci.yml` に depguard を設定し、`internal/kanban` から `os` / `io` / `io/fs` / `os/exec` / `net/http` / `time` / `math/rand` / `crypto/rand` の import を禁止
   - `tools/ast-grep/no-io-in-kanban.yml` に `internal/kanban` 配下の `fmt.Print*` / `fmt.Fprint*` 検出ルールを記述（`fmt.Sprintf` は許可）
   - `Justfile` に `just lint` レシピを追加し、`golangci-lint`（depguard 経由）と `ast-grep` 双方を呼び出す
@@ -151,3 +151,9 @@
   - 全コマンドが exit 0 で終了し、CI 想定でのレディ状態を満たす
   - _Requirements: 1.4, 7.3, 7.4_
   - _Depends: 1.2, 6.2_
+
+## Implementation Notes
+
+- task 1.2: depguard (golangci-lint v2) の `files:` glob は `**/` の挙動が `glob.Glob` 仕様で「中間 segment が 1 つ以上必要」となるため、`**/internal/kanban/**/*.go` 単独では `internal/kanban/` 直下ファイルが拾えない。`**/internal/kanban/*.go` と `**/internal/kanban/**/*.go` の 2 系統を併記する必要がある (`tools/golangci/.golangci.yml` 内コメント参照)。
+- task 1.2: ast-grep の Go パーサで `fmt.Println($$$)` という pattern は `type_conversion_expression` として解釈されてしまい呼び出し式にマッチしない。`kind: call_expression` + `regex: "^fmt\\.(Print|Println|Printf|Fprint|Fprintln|Fprintf)\\("` の組合せで構文ノードを呼び出し式に固定し regex で関数名を絞る方式が必須。
+- task 1.2: `internal/kanban/` 配下に `_*.go` で始まるダミーファイルを置くと Go の build が無視するため lint 検証も発火しない。検証用ダミーは `zz_*.go` 等の通常ファイル名で配置し、検証後に必ず削除する。

@@ -1,0 +1,53 @@
+# golangci-lint v2 設定。
+# 役割:
+#   - internal/kanban パッケージから副作用 import を禁止し、純ロジック契約 (R7.3, R7.4) を機械的に守る。
+#   - 本リポジトリ全体の lint は最小化し、kanban 純度の機械的保証だけをここで担う。
+#     その他の汎用 lint (gofmt 等) は go vet / go fmt 等の Justfile レシピに分離する。
+#
+# 関連:
+#   - design.md "依存方向と静的ルール" / "Testing Strategy / 静的検査"
+#   - tasks.md 1.2
+
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - depguard
+  settings:
+    depguard:
+      rules:
+        # internal/kanban: 純ドメインからの I/O / 非決定性 import を禁止する。
+        # files glob 注意:
+        #   `**/` は 1 segment 以上の中間パスを要求するため、`**/internal/kanban/**/*.go`
+        #   だけでは `internal/kanban/foo.go` (直下ファイル) が漏れる。直下用と
+        #   サブパッケージ用の 2 系統を必ず併記すること。
+        kanban-pure:
+          list-mode: lax
+          files:
+            - "**/internal/kanban/*.go"
+            - "**/internal/kanban/**/*.go"
+          deny:
+            - pkg: "os"
+              desc: "internal/kanban must remain pure (no OS I/O); see design.md"
+            - pkg: "io"
+              desc: "internal/kanban must remain pure (no I/O package)"
+            - pkg: "io/fs"
+              desc: "internal/kanban must remain pure (no filesystem)"
+            - pkg: "os/exec"
+              desc: "internal/kanban must not spawn external processes"
+            - pkg: "net/http"
+              desc: "internal/kanban must not perform network I/O"
+            - pkg: "time"
+              desc: "internal/kanban must remain deterministic (no clock)"
+            - pkg: "math/rand"
+              desc: "internal/kanban must remain deterministic (no randomness)"
+            - pkg: "crypto/rand"
+              desc: "internal/kanban must remain deterministic (no randomness)"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

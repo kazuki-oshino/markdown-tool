@@ -1,0 +1,33 @@
+# ast-grep ルール: internal/kanban 配下で fmt.Print* / fmt.Fprint* を禁止する。
+#
+# 役割:
+#   - depguard では import レベルでしか拒否できないため、`fmt` の中の Print/Fprint 系
+#     呼び出しのみを構文レベルで検出する。fmt.Sprintf 等の文字列整形はロジックでも
+#     必要なので許可する (design.md「internal/kanban の import 禁止」項に明記)。
+#   - これにより R7.3「ロジック内部から外部 I/O を発生させない」を構文レベルで保証する。
+#
+# 適用対象:
+#   - internal/kanban 配下の .go ファイル全件 (テストを含む / kanban 内のテストは
+#     ロジック単体テストであり標準出力に書く必要は無い前提)
+#
+# 実装メモ:
+#   ast-grep の Go パーサは `fmt.Println($$$)` という pattern を `type_conversion_expression`
+#   として解釈してしまうため、`kind: call_expression` で構文ノードを呼び出し式に固定し、
+#   regex でその先頭が `fmt.Print*` / `fmt.Fprint*` であることを照合する。
+#   これにより `fmt.Sprintf(` / `fmt.Sprintln(` などは regex の選択肢に含まれず、安全に
+#   除外される。
+#
+# 実行:
+#   ast-grep scan --rule tools/ast-grep/no-io-in-kanban.yml
+#   (Justfile lint レシピから呼び出す)
+
+id: no-io-in-kanban
+language: Go
+message: "internal/kanban must not call fmt.Print* / fmt.Fprint* (use fmt.Sprintf or return strings instead). See design.md / R7.3."
+severity: error
+files:
+  - "internal/kanban/**/*.go"
+rule:
+  all:
+    - kind: call_expression
+    - regex: "^fmt\\.(Print|Println|Printf|Fprint|Fprintln|Fprintf)\\("
