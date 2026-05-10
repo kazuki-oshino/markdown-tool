@@ -1,7 +1,7 @@
 {
   "approvals": {
     "design": {
-      "approved": false,
+      "approved": true,
       "generated": true
     },
     "requirements": {
@@ -18,5 +18,5 @@
   "language": "ja",
   "phase": "design-generated",
   "ready_for_implementation": false,
-  "updated_at": "2026-05-10T00:50:00Z"
+  "updated_at": "2026-05-10T01:03:44Z"
 }
