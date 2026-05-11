@@ -5,9 +5,10 @@ import "testing"
 // TestFindBoundary は完了集／未完了パートの境界判定 (findBoundary) を検証する。
 //
 // 仕様 (tasks.md 2.2 / requirements.md R2.1, R2.2, R2.3, design.md):
-//   - findBoundary は最初の kindUnchecked 行のインデックスを返す。
-//   - kindUnchecked が 1 つも存在しなければ len(lines) を返す（未完了パート無し = 完了集のみ）。
-//   - 先頭が kindUnchecked なら 0 を返す（完了集が空）。
+//   - findBoundary は最後の kindDivider 行を優先して返す。
+//   - kindDivider が無ければ最初の kindUnchecked 行のインデックスを返す。
+//   - kindDivider / kindUnchecked が 1 つも存在しなければ len(lines) を返す（未完了パート無し = 完了集のみ）。
+//   - 先頭が kindUnchecked または kindDivider なら 0 を返す（完了集が空）。
 //   - 空 slice は len(lines) == 0 を返す（境界なし、no-op 入力扱い）。
 //
 // 設計上の意図:
@@ -70,6 +71,27 @@ func TestFindBoundary(t *testing.T) {
 			name:  "empty_lines",
 			lines: []line{},
 			want:  0,
+		},
+		{
+			// ケース 5: divider がある場合は最初の [ ] より前にある最後の divider を境界にする。
+			//   divider より下にある完了タスクを、divider より上の完了群へ移動できるようにする。
+			name:  "divider_before_unchecked_takes_priority",
+			lines: parseLines("- [x] done\n\n---\n\n- [x] completed below divider\n- [ ] open"),
+			want:  2,
+		},
+		{
+			// ケース 6: divider が複数ある場合は最後の divider を境界にする。
+			//   途中の divider やその下の [ ] は、最後の divider がある場合の境界には使わない。
+			name:  "last_divider_wins",
+			lines: parseLines("- [x] old\n---\n- [ ] earlier open\n---\n- [x] completed below last divider"),
+			want:  3,
+		},
+		{
+			// ケース 7: divider がある場合は [ ] が存在しなくても divider を境界にする。
+			//   divider 下の [x] だけが残っているファイルでも sort を no-op にしない。
+			name:  "divider_without_unchecked",
+			lines: parseLines("- [x] old\n---\n- [x] completed below divider"),
+			want:  1,
 		},
 	}
 

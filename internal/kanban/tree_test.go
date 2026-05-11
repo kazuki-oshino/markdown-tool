@@ -11,7 +11,7 @@ import (
 // 構築する不変条件を網羅する (tasks.md 2.3 / requirements.md R3.2 / design.md "走査と移動アルゴリズム")。
 //
 // 不変条件:
-//   - lines[from:] の全行（kindOther / kindUnchecked / kindChecked）が
+//   - lines[from:] の全行（kindOther / kindUnchecked / kindChecked / kindDivider）が
 //     フォレストの要素 (root or descendant) として網羅される。
 //   - child.indent > parent.indent の連続を当該 root の子孫範囲として吸収する。
 //   - 子孫範囲内では再帰的に同じルールでサブフォレストを構築する。

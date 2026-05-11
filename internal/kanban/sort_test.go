@@ -31,6 +31,8 @@ var goldenCases = []string{
 	"parent_done_child_open",
 	"child_done_parent_open",
 	"blank_gap_after_completed",
+	"divider_completed_below",
+	"multiple_dividers_last_wins",
 }
 
 // TestSort_Goldens は testdata/*.md.in を Sort に通した結果が

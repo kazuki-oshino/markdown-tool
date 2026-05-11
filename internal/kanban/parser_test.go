@@ -60,7 +60,8 @@ func TestIndentDepth(t *testing.T) {
 // 不変条件:
 //   - raw は LF 分割後の素の文字列（改行を含まない）
 //   - indent は indentDepth(raw) と一致
-//   - kind: "[x]" or "[X]" を含めば kindChecked / "[ ]" を含めば kindUnchecked / それ以外は kindOther
+//   - kind: trim 後 "---" なら kindDivider / "[x]" or "[X]" を含めば kindChecked /
+//     "[ ]" を含めば kindUnchecked / それ以外は kindOther
 //   - 末尾改行は最終要素として空行 (raw="") を生成し、strings.Join("\n") で round-trip 可能
 func TestParseLines(t *testing.T) {
 	cases := []struct {
@@ -101,6 +102,13 @@ func TestParseLines(t *testing.T) {
 			input: "# Heading",
 			want: []line{
 				{indent: 0, kind: kindOther, raw: "# Heading"},
+			},
+		},
+		{
+			name:  "divider line is kindDivider",
+			input: "  ---  ",
+			want: []line{
+				{indent: 1, kind: kindDivider, raw: "  ---  "},
 			},
 		},
 		{

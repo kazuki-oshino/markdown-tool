@@ -6,14 +6,14 @@ import "strings"
 //
 // 仕様 (tasks.md 2.4 / requirements.md R1.2, R3.3, R3.4, R3.5 /
 //
-//	design.md "内部補助関数（パッケージ非公開）" の canMove 行 +
-//	"走査と移動アルゴリズム（不変条件）" 3):
-//   - ルート b.head 自身が kindChecked であり、かつ
-//     子孫を再帰的に走査して全ての kindChecked / kindUnchecked 行が kindChecked
-//     (= kindUnchecked が 1 つも存在しない) ときのみ true を返す。
-//   - ルートが kindUnchecked または kindOther の時点で false (R3.4 / R3.5 を構造的に吸収)。
-//   - 子孫に kindUnchecked が 1 つでも残っていれば false (R3.3)。
-//   - kindOther 子孫 (memo / 空行など) は判定中立で、true / false いずれにも寄与しない。
+//		design.md "内部補助関数（パッケージ非公開）" の canMove 行 +
+//		"走査と移動アルゴリズム（不変条件）" 3):
+//	  - ルート b.head 自身が kindChecked であり、かつ
+//	    子孫を再帰的に走査して全ての kindChecked / kindUnchecked 行が kindChecked
+//	    (= kindUnchecked が 1 つも存在しない) ときのみ true を返す。
+//	  - ルートが kindUnchecked / kindDivider / kindOther の時点で false (R3.4 / R3.5 を構造的に吸収)。
+//	  - 子孫に kindUnchecked が 1 つでも残っていれば false (R3.3)。
+//	  - kindOther 子孫 (memo / 空行など) は判定中立で、true / false いずれにも寄与しない。
 //
 // 設計上の意図:
 //   - canMove は「ルート単位で塊として移動できるか」のみを判定する。
@@ -24,7 +24,7 @@ import "strings"
 func canMove(b block) bool {
 	// ルートが kindChecked でなければ早期に false。
 	// kindUnchecked: R3.4「親未完なら子完了でも単独移動禁止」を構造的に吸収。
-	// kindOther:    そもそも移動対象外 (checkbox を持たない見出し / メモ等)。
+	// kindDivider / kindOther: そもそも移動対象外 (divider / 見出し / メモ等)。
 	if b.head.kind != kindChecked {
 		return false
 	}

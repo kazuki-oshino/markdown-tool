@@ -36,23 +36,23 @@
 ## 2. internal/kanban: 純ドメイン実装
 
 - [x] 2.1 行パーサと indentDepth 正規化
-  - `internal/kanban/parser.go` に `line` / `kind`（`kindOther` / `kindUnchecked` / `kindChecked`）と `parseLines(input string) []line` / `indentDepth(raw string) int` を実装
+  - `internal/kanban/parser.go` に `line` / `kind`（`kindOther` / `kindUnchecked` / `kindChecked` / `kindDivider`）と `parseLines(input string) []line` / `indentDepth(raw string) int` を実装
   - インデント正規化規則: タブ 1 個 = 深さ +1、半角スペース 2 個ごとに +1、半角 1 個は深さ 0、タブと半角混在はタブ優先で同段継続
-  - `[x]` / `[X]` を `kindChecked`、`[ ]` を `kindUnchecked`、それ以外を `kindOther` に分類
+  - trim 後 `---` を `kindDivider`、`[x]` / `[X]` を `kindChecked`、`[ ]` を `kindUnchecked`、それ以外を `kindOther` に分類
   - `parser_test.go` のテーブルテストで「タブ単独」「半角 2」「半角 4」「半角 1（無効）」「タブ+半角混在」の各ケースが期待 depth と kind を返すこと
   - _Requirements: 3.1_
 
 - [x] 2.2 完了集／未完了パート境界判定
   - `internal/kanban/boundary.go` に `findBoundary(lines []line) int` を実装
-  - 最初の `kindUnchecked` 行のインデックスを返し、無ければ `len(lines)` を返す
-  - `boundary_test.go` で「中間に `[ ]` あり」「先頭が `[ ]`」「`[ ]` なし」「空ファイル」の各ケースで期待 index を返すこと
+  - 最後の `kindDivider` 行を優先して返し、divider が無ければ最初の `kindUnchecked` 行のインデックスを返し、どちらも無ければ `len(lines)` を返す
+  - `boundary_test.go` で「中間に `[ ]` あり」「先頭が `[ ]`」「`[ ]` なし」「空ファイル」「divider 優先」「複数 divider は最後」「divider あり `[ ]` なし」の各ケースで期待 index を返すこと
   - _Requirements: 2.1, 2.2, 2.3_
 
 - [x] 2.3 親子フォレスト構築（buildBlocks）
   - `internal/kanban/tree.go` に `block` 型と `buildBlocks(lines []line, from int) []block` を実装
   - `from` 以降の未完了パートを最浅インデント行をルートとする順序付きフォレストとして構築し、`child.indent > parent.indent` 行を子孫に吸収する
-  - 未完了パートの全行（`[x]` / `[ ]` / `kindOther` ルート含む）がフォレスト要素として網羅されること
-  - `tree_test.go` で「フラットなルート列」「ネスト 2 段」「兄弟と従兄弟混在」「`kindOther` ルート混在」の各ケースで期待構造が得られること
+  - 未完了パートの全行（`[x]` / `[ ]` / `kindDivider` / `kindOther` ルート含む）がフォレスト要素として網羅されること
+  - `tree_test.go` で「フラットなルート列」「ネスト 2 段」「兄弟と従兄弟混在」「`kindOther` / `kindDivider` ルート混在」の各ケースで期待構造が得られること
   - _Requirements: 3.2_
 
 - [x] 2.4 ブロック移動可否判定（canMove）

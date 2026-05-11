@@ -19,7 +19,7 @@ type block struct {
 // 順序付きフォレストとして構築する。
 //
 // 仕様 (tasks.md 2.3 / requirements.md R3.2 / design.md "走査と移動アルゴリズム"):
-//   - lines[from:] の全行 (kindOther / kindUnchecked / kindChecked) を
+//   - lines[from:] の全行 (kindOther / kindUnchecked / kindChecked / kindDivider) を
 //     フォレストの要素 (root or descendant) として網羅する。
 //   - 連続する child.indent > parent.indent 行を直前 root の子孫範囲として吸収する。
 //   - 子孫範囲内では再帰的に同じルールでサブフォレストを構築する。

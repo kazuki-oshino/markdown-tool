@@ -1,7 +1,7 @@
 // Package kanban は対象ファイル外への I/O を一切持たない純ドメイン層。
 // 対外公開 API（Sort 等）は後続タスク（2.5）で追加する。task 2.1 では
 // 行パーサとインデント深さ計算 (parseLines / indentDepth) のみを置き、
-// 行種別 enum (kindOther / kindUnchecked / kindChecked) と
+// 行種別 enum (kindOther / kindUnchecked / kindChecked / kindDivider) と
 // 値型 line を確定する。
 //
 // 設計上の不変条件:
@@ -11,7 +11,7 @@ package kanban
 
 import "strings"
 
-// kind は 1 行が表す checkbox 種別。
+// kind は 1 行が表す Markdown 行種別。
 type kind int
 
 const (
@@ -21,6 +21,8 @@ const (
 	kindUnchecked
 	// kindChecked は完了タスク行（"[x]" または "[X]" を含む）。
 	kindChecked
+	// kindDivider は sort 境界として扱う divider 行（trim 後に "---" と一致）。
+	kindDivider
 )
 
 // line はパース済み 1 行の値オブジェクト。
@@ -39,8 +41,9 @@ type line struct {
 //   - strings.Split(input, "\n") の結果と完全 1:1 対応する。末尾改行があれば最終要素として
 //     空行 (raw = "") が付き、strings.Join(raws, "\n") で round-trip 可能。
 //   - 各行の indent は indentDepth(raw) を呼び出して算出する。
-//   - 各行の kind は次の優先順位で判定する: "[x]" or "[X]" を含む → kindChecked、
-//     "[ ]" を含む → kindUnchecked、いずれも含まない → kindOther。
+//   - 各行の kind は次の優先順位で判定する: trim 後に "---" と一致 → kindDivider、
+//     "[x]" or "[X]" を含む → kindChecked、"[ ]" を含む → kindUnchecked、
+//     いずれも含まない → kindOther。
 //   - チェックボックスの位置（行頭からの距離・リストマーカ "- " 等の有無）は問わない。
 //     現実の kanban Markdown では 1 行に複数のチェックボックスは出現しない前提。
 //
@@ -95,10 +98,13 @@ func indentDepth(raw string) int {
 	return depth
 }
 
-// classifyKind は raw の checkbox 種別を判定する。
-// design.md / tasks.md 2.1 の規則に従い「完了優先」で判定する
+// classifyKind は raw の Markdown 行種別を判定する。
+// design.md / tasks.md 2.1 の規則に従い「divider 優先、次に完了優先」で判定する
 // （[x]/[X] と [ ] が同一行に共存するケースは現実の kanban Markdown では想定外）。
 func classifyKind(raw string) kind {
+	if strings.TrimSpace(raw) == "---" {
+		return kindDivider
+	}
 	if strings.Contains(raw, "[x]") || strings.Contains(raw, "[X]") {
 		return kindChecked
 	}

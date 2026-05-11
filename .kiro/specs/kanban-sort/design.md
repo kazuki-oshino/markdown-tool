@@ -15,7 +15,7 @@
 ### Goals
 
 - `kanban.Sort(input string) (string, error)` を「対象ファイル外への I/O を一切含まない決定的な純関数」として確立し、TDD で構築する
-- 完了集／未完了パートの境界判定（最初の `[ ]` 直前）と親子インデント尊重ルール（タブ＝半角スペース2個以上、子完了かつ親未完了で移動禁止 / 親完了かつ子に未完了残で移動禁止 / 親子全完了で塊ごと移動）を機械的に決定論で実装する
+- 完了集／未完了パートの境界判定（最後の divider `---` を優先し、divider が無い場合は最初の `[ ]` 直前）と親子インデント尊重ルール（タブ＝半角スペース2個以上、子完了かつ親未完了で移動禁止 / 親完了かつ子に未完了残で移動禁止 / 親子全完了で塊ごと移動）を機械的に決定論で実装する
 - `--dry-run` での非破壊差分プレビューと、デフォルトのアトミック上書き（中間破損禁止・改行コード保持）を提供する
 - 引数なし起動時に Bubble Tea スケルトンを起動し、`q` / `Ctrl+C` で終了コード 0 を返す
 - `internal/kanban` パッケージ内の純ロジックから `os` / `io` / `fmt`(stdout) / `time` / `rand` の import を禁止する静的ルールを設計レベルで明示する
@@ -35,7 +35,7 @@
 
 - 単一 Markdown ファイル (UTF-8 想定) の読み込み → ソート → 上書き／差分出力の end-to-end フロー
 - 行ベースの軽量パーサ（インデント深さ・チェックボックス状態・残テキスト）
-- 完了集／未完了境界の判定アルゴリズム（最初の `[ ]` 直前を境界とする）
+- 完了集／未完了境界の判定アルゴリズム（最後の divider `---` を優先し、divider が無い場合は最初の `[ ]` 直前を境界とする）
 - 親子インデントツリーの構築と移動可否判定
 - 純関数 `kanban.Sort(input string) (string, error)` の公開 API 安定化
 - `--dry-run` 用の最小差分フォーマット（行単位 `+`/`-`/` ` プレフィックス）
@@ -279,9 +279,9 @@ stateDiagram-v2
 | 1.3 | 移動対象なしならファイル不変 | `cmd/mdt sort` | content == sorted 比較分岐 | sort 主要フロー (no-op 分岐) |
 | 1.4 | 対象ファイル外への副作用禁止 | `internal/kanban`, `internal/fileio` | depguard / ast-grep 静的ルール | — |
 | 1.5 | 読み取り失敗時のエラーと非ゼロ終了 | `cmd/mdt sort`, `internal/fileio` | `Read(path) error` + RuntimeError(1) | sort 主要フロー |
-| 2.1 | 最初の `[ ]` 直前を境界とする | `internal/kanban` (`boundary.go`) | 内部関数 `findBoundary(lines) int` | — |
-| 2.2 | `[ ]` が一切なければ不変・正常終了 | `internal/kanban`, `cmd/mdt sort` | `Sort` 早期リターン | sort 主要フロー (no-op) |
-| 2.3 | 先頭が `[ ]` なら完了集空で不変 | `internal/kanban` (`boundary.go`) | 内部関数 `findBoundary` | sort 主要フロー (no-op) |
+| 2.1 | divider があれば最後の divider、なければ最初の `[ ]` 直前を境界とする | `internal/kanban` (`boundary.go`) | 内部関数 `findBoundary(lines) int` | — |
+| 2.2 | divider と `[ ]` が一切なければ不変・正常終了 | `internal/kanban`, `cmd/mdt sort` | `Sort` 早期リターン | sort 主要フロー (no-op) |
+| 2.3 | divider がなく先頭が `[ ]` なら完了集空で不変 | `internal/kanban` (`boundary.go`) | 内部関数 `findBoundary` | sort 主要フロー (no-op) |
 | 2.4 | 完了集側の非チェックボックス行を改変しない | `internal/kanban` (`move.go`) | `Sort` の不変条件 | — |
 | 2.5 | 未完了パート側の非チェックボックス行を移動対象としない | `internal/kanban` (`move.go`) | `Sort` の不変条件 | — |
 | 3.1 | タブ／半角2個以上をインデント差として判定 | `internal/kanban` (`parser.go`) | 内部関数 `indentDepth(line) int` | — |
@@ -331,7 +331,7 @@ stateDiagram-v2
 **Responsibilities & Constraints**
 
 - 入力 Markdown を行配列に分解し、トークン化（インデント深さ・チェック状態・テキスト）する
-- 完了集／未完了パート境界（最初の `[ ]` 直前）を判定する
+- 完了集／未完了パート境界（最後の divider `---` 優先、なければ最初の `[ ]` 直前）を判定する
 - 親子ブロックを構築し、移動可否を機械的に判定する
 - 移動可能なブロックを未完了パートから取り除き、完了集末尾へ「未完了パート内の出現順」で追加し、結果文字列を再構築して返す
 - パッケージ内では以下の import を禁止する: `os`, `io`, `io/fs`, `os/exec`, `net/http`, `time`, `math/rand`, `crypto/rand`, および `fmt` の `Print*`/`Fprint*` 系（`fmt.Sprintf` 等は許可）
@@ -379,15 +379,15 @@ func Sort(input string) (string, error)
 |------|------------|------|
 | `parseLines` | `func parseLines(input string) []line` | 行を `line{indent int, kind kind, raw string}` に分解（行は LF で分割、`raw` は改行を含まない） |
 | `indentDepth` | `func indentDepth(raw string) int` | タブ 1 個または半角 2 個以上を 1 段として深さ算出（後述の正規化規則に従う） |
-| `findBoundary` | `func findBoundary(lines []line) int` | 最初の `[ ]` 行のインデックスを返す（無ければ `len(lines)`） |
-| `buildBlocks` | `func buildBlocks(lines []line, from int) []block` | `from` 以降の **未完了パート全行**を対象に、最浅インデント行を**ルート**とする順序付きフォレストを構築する。ルートは `[x]` / `[ ]` / `kindOther` のいずれも含み、配下に深いインデント行を子孫として吸収する |
-| `canMove` | `func canMove(b block) bool` | ルート自身が `kindChecked` (`[x]`) かつ子孫の全 `[x]`/`[ ]` 行が `kindChecked` であるときに `true`。ルートが `kindUnchecked` (`[ ]`) または子孫に `kindUnchecked` が 1 つでもあれば `false`（R3.3, R3.4 を一括で吸収） |
+| `findBoundary` | `func findBoundary(lines []line) int` | 最後の divider 行のインデックスを返す。divider が無ければ最初の `[ ]` 行のインデックスを返す。どちらも無ければ `len(lines)` |
+| `buildBlocks` | `func buildBlocks(lines []line, from int) []block` | `from` 以降の **未完了パート全行**を対象に、最浅インデント行を**ルート**とする順序付きフォレストを構築する。ルートは `[x]` / `[ ]` / `kindOther` / `kindDivider` のいずれも含み、配下に深いインデント行を子孫として吸収する |
+| `canMove` | `func canMove(b block) bool` | ルート自身が `kindChecked` (`[x]`) かつ子孫の全 `[x]`/`[ ]` 行が `kindChecked` であるときに `true`。ルートが `kindUnchecked` (`[ ]`) / `kindDivider` / `kindOther`、または子孫に `kindUnchecked` が 1 つでもあれば `false`（R3.3, R3.4 を一括で吸収） |
 | `assemble` | `func assemble(prefix []line, completed []block, remaining []line) string` | 結果文字列を LF 統一で再構築する。改行コード復元は呼ばない |
 
 ##### 走査と移動アルゴリズム（不変条件）
 
-1. `findBoundary` で完了集末尾位置 `b` を決定する。`b == len(lines)` の場合は `Sort(input) == input` を返す（R2.2, R2.3 早期リターン）
-2. `buildBlocks(lines, b)` で未完了パート全体を **順序付きフォレスト** として構築する。フォレストには `[x]` ルートも `[ ]` ルートも `kindOther` ルートも含む（**未完了パートの全行をフォレストとして網羅すること**を不変条件とする）
+1. `findBoundary` で完了集末尾位置 `b` を決定する。最後の divider `---` が存在すればそれを優先し、divider が無ければ最初の `[ ]` を境界にする。`b == len(lines)` の場合は `Sort(input) == input` を返す（R2.2, R2.3 早期リターン）
+2. `buildBlocks(lines, b)` で未完了パート全体を **順序付きフォレスト** として構築する。フォレストには `[x]` ルートも `[ ]` ルートも `kindDivider` / `kindOther` ルートも含む（**未完了パートの全行をフォレストとして網羅すること**を不変条件とする）
 3. フォレストを出現順に走査し、`canMove(root) == true` のルートは「移動候補列 `completed`」へ、それ以外は「未完了パート残留列 `remaining`」へ転送する。**子だけを抜き出すことは禁止**（R3.4 を構造的に保証）
 4. `assemble(prefix=lines[:b], completed, remaining)` で結果文字列を組み立てる
 5. 移動対象ブロック内部の行順序・インデント文字種・インデント幅は転送中に一切変更しない（R3.6）
@@ -662,7 +662,7 @@ func Run() error
 | 型 | フィールド | 役割 | 不変条件 |
 |----|------------|------|----------|
 | `line` | `indent int`, `kind kind`, `raw string` | パース後の 1 行 | `raw` は元の行（改行除く）をそのまま保持 |
-| `kind` | enum: `kindOther`, `kindUnchecked`, `kindChecked` | 行の種別 | `[x]` / `[X]` を `kindChecked`、`[ ]` を `kindUnchecked` とする |
+| `kind` | enum: `kindOther`, `kindUnchecked`, `kindChecked`, `kindDivider` | 行の種別 | trim 後 `---` を `kindDivider`、`[x]` / `[X]` を `kindChecked`、`[ ]` を `kindUnchecked` とする |
 | `block` | `head line`, `children []block` | 親 + 子孫ブロック | `children` の `head.indent > parent.head.indent` |
 
 ### File I/O Meta
@@ -698,7 +698,7 @@ func Run() error
 
 - `internal/kanban`: テーブル駆動 + ゴールデンファイル
   - `parseLines` のインデント判定（タブ単独、半角 2 個、半角 4 個、混在）
-  - `findBoundary` の境界判定（先頭が `[ ]` / `[ ]` なし / 中間に `[ ]`）
+  - `findBoundary` の境界判定（最後の divider 優先 / 複数 divider / divider なしで先頭が `[ ]` / `[ ]` なし / 中間に `[ ]`）
   - `canMove` の親子判定（親完了/子完了 / 親完了/子未完 / 子完了/親未完 / 全完了）
   - `Sort` のゴールデンテスト（`testdata/kanban/*.md.in` → `.md.out`）
   - 冪等性: `Sort(Sort(x)) == Sort(x)` を property 風に複数ケースで確認
